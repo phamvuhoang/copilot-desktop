@@ -11,7 +11,15 @@ class AICopilotRenderer {
 
         this.isProcessing = false;
         this.messageHistory = [];
-        this.apiBaseUrl = 'http://127.0.0.1:8000/api/v1';
+        this.apiBaseUrl = window.clientConfig ? window.clientConfig.getApiBaseUrl() : 'http://127.0.0.1:8000/api/v1';
+        this.failedMessages = new Map(); // Store failed messages for retry
+
+        console.log('AICopilotRenderer constructor - API Base URL:', this.apiBaseUrl);
+
+        // Voice functionality
+        this.isRecording = false;
+        this.mediaRecorder = null;
+        this.audioChunks = [];
 
         this.init();
     }
@@ -26,6 +34,8 @@ class AICopilotRenderer {
     }
 
     setupUI() {
+        console.log('Setting up UI...');
+
         // Get DOM elements
         this.messageInput = document.getElementById('messageInput');
         this.chatHistory = document.getElementById('chatHistory');
@@ -34,9 +44,18 @@ class AICopilotRenderer {
         this.charCount = document.querySelector('.char-count');
         this.loadingOverlay = document.getElementById('loadingOverlay');
 
+        console.log('DOM elements found:', {
+            messageInput: !!this.messageInput,
+            chatHistory: !!this.chatHistory,
+            sendBtn: !!this.sendBtn,
+            statusIndicator: !!this.statusIndicator,
+            charCount: !!this.charCount,
+            loadingOverlay: !!this.loadingOverlay
+        });
+
         // Setup event listeners
         this.setupEventListeners();
-        
+
         // Initialize UI state
         this.updateUI();
 
@@ -47,26 +66,33 @@ class AICopilotRenderer {
     }
 
     setupEventListeners() {
-        // Message input events
-        this.messageInput.addEventListener('input', () => this.handleInputChange());
+        console.log('Setting up event listeners...');
+
+        // Message input events - combine input handlers
+        this.messageInput.addEventListener('input', () => {
+            this.handleInputChange();
+            this.autoResizeTextarea();
+        });
         this.messageInput.addEventListener('keydown', (e) => this.handleKeyDown(e));
-        
+
         // Button events
-        this.sendBtn.addEventListener('click', () => this.sendMessage());
+        this.sendBtn.addEventListener('click', () => {
+            console.log('Send button clicked');
+            this.sendMessage();
+        });
         document.getElementById('minimizeBtn').addEventListener('click', () => this.hideWindow());
         document.getElementById('settingsBtn').addEventListener('click', () => this.openSettings());
-        
+
         // Voice and screenshot buttons (disabled for now)
         document.getElementById('voiceBtn').addEventListener('click', () => this.handleVoiceInput());
         document.getElementById('screenshotBtn').addEventListener('click', () => this.handleScreenshot());
-        
-        // Auto-resize textarea
-        this.messageInput.addEventListener('input', () => this.autoResizeTextarea());
-        
+
         // Focus input when window is shown
         window.addEventListener('focus', () => {
             setTimeout(() => this.messageInput.focus(), 100);
         });
+
+        console.log('Event listeners set up successfully');
     }
 
     handleInputChange() {
@@ -90,14 +116,20 @@ class AICopilotRenderer {
     }
 
     handleKeyDown(e) {
+        console.log('Key pressed:', e.key, 'Shift:', e.shiftKey);
+
         // Send message on Enter (without Shift)
         if (e.key === 'Enter' && !e.shiftKey) {
+            console.log('Enter key detected, preventing default and sending message');
             e.preventDefault();
             if (!this.sendBtn.disabled) {
+                console.log('Send button not disabled, calling sendMessage');
                 this.sendMessage();
+            } else {
+                console.log('Send button is disabled');
             }
         }
-        
+
         // Hide window on Escape
         if (e.key === 'Escape') {
             this.hideWindow();
@@ -111,8 +143,14 @@ class AICopilotRenderer {
     }
 
     async sendMessage() {
+        console.log('sendMessage called');
         const message = this.messageInput.value.trim();
-        if (!message || this.isProcessing) return;
+        console.log('Message content:', message);
+        console.log('Is processing:', this.isProcessing);
+        if (!message || this.isProcessing) {
+            console.log('Returning early - no message or processing');
+            return;
+        }
 
         // Add user message to chat
         this.addMessage(message, 'user');
@@ -146,7 +184,7 @@ class AICopilotRenderer {
                 this.setStatus('error', 'Error occurred');
             }
 
-            this.addMessage(errorMessage, 'assistant', true);
+            this.addMessage(errorMessage, 'assistant', true, null, message);
         } finally {
             this.setProcessingState(false);
         }
@@ -228,52 +266,134 @@ class AICopilotRenderer {
         }
     }
 
-    addMessage(content, sender, isError = false) {
+    addMessage(content, sender, isError = false, messageId = null, originalMessage = null) {
         // Remove welcome message if it exists
         const welcomeMessage = this.chatHistory.querySelector('.welcome-message');
         if (welcomeMessage) {
             welcomeMessage.remove();
         }
 
+        // Generate message ID if not provided
+        if (!messageId) {
+            messageId = 'msg_' + Date.now() + '_' + Math.random().toString(36).substring(2, 11);
+        }
+
         // Create message element
         const messageDiv = document.createElement('div');
         messageDiv.className = `message message-${sender}`;
-        
+        messageDiv.dataset.messageId = messageId;
+
         const contentDiv = document.createElement('div');
         contentDiv.className = 'message-content';
         contentDiv.textContent = content;
-        
+
         if (isError) {
             contentDiv.style.background = '#fee2e2';
             contentDiv.style.color = '#dc2626';
             contentDiv.style.borderColor = '#fecaca';
         }
-        
+
         const timestampDiv = document.createElement('div');
         timestampDiv.className = 'message-timestamp';
         timestampDiv.textContent = new Date().toLocaleTimeString();
-        
+
         messageDiv.appendChild(contentDiv);
         messageDiv.appendChild(timestampDiv);
-        
+
+        // Add action buttons for failed messages
+        if (isError && sender === 'assistant' && originalMessage) {
+            const actionsDiv = document.createElement('div');
+            actionsDiv.className = 'message-actions';
+            actionsDiv.style.marginTop = '8px';
+            actionsDiv.style.display = 'flex';
+            actionsDiv.style.gap = '8px';
+
+            const retryBtn = document.createElement('button');
+            retryBtn.className = 'action-btn retry-btn';
+            retryBtn.innerHTML = '🔄 Retry';
+            retryBtn.title = 'Retry sending the message';
+            retryBtn.style.cssText = `
+                padding: 4px 8px;
+                border: 1px solid #d1d5db;
+                border-radius: 4px;
+                background: #f9fafb;
+                color: #374151;
+                cursor: pointer;
+                font-size: 12px;
+            `;
+            retryBtn.onclick = () => this.retryFailedMessage(messageId);
+
+            const deleteBtn = document.createElement('button');
+            deleteBtn.className = 'action-btn delete-btn';
+            deleteBtn.innerHTML = '🗑️ Delete';
+            deleteBtn.title = 'Delete this message';
+            deleteBtn.style.cssText = `
+                padding: 4px 8px;
+                border: 1px solid #d1d5db;
+                border-radius: 4px;
+                background: #f9fafb;
+                color: #374151;
+                cursor: pointer;
+                font-size: 12px;
+            `;
+            deleteBtn.onclick = () => this.deleteMessage(messageId);
+
+            actionsDiv.appendChild(retryBtn);
+            actionsDiv.appendChild(deleteBtn);
+            messageDiv.appendChild(actionsDiv);
+
+            // Store failed message for retry
+            this.failedMessages.set(messageId, originalMessage);
+        }
+
         // Add to chat history
         this.chatHistory.appendChild(messageDiv);
-        
+
         // Scroll to bottom
         this.scrollToBottom();
-        
+
         // Store in history
         this.messageHistory.push({
             content,
             sender,
-            timestamp: new Date().toISOString()
+            timestamp: new Date().toISOString(),
+            messageId,
+            isError
         });
+
+        return messageId;
     }
 
     scrollToBottom() {
         setTimeout(() => {
             this.chatHistory.scrollTop = this.chatHistory.scrollHeight;
         }, 100);
+    }
+
+    retryFailedMessage(messageId) {
+        const originalMessage = this.failedMessages.get(messageId);
+        if (originalMessage) {
+            // Remove the failed message from UI
+            this.deleteMessage(messageId);
+
+            // Resend the original message
+            this.messageInput.value = originalMessage;
+            this.sendMessage();
+        }
+    }
+
+    deleteMessage(messageId) {
+        // Remove from UI
+        const messageElement = this.chatHistory.querySelector(`[data-message-id="${messageId}"]`);
+        if (messageElement) {
+            messageElement.remove();
+        }
+
+        // Remove from failed messages
+        this.failedMessages.delete(messageId);
+
+        // Remove from message history
+        this.messageHistory = this.messageHistory.filter(msg => msg.messageId !== messageId);
     }
 
     setProcessingState(processing) {
@@ -314,10 +434,169 @@ class AICopilotRenderer {
         this.addMessage('Settings panel will be implemented in a future update.', 'assistant');
     }
 
-    // Voice input (placeholder)
-    handleVoiceInput() {
-        console.log('Voice input not yet implemented');
-        this.addMessage('Voice input will be available once the voice interaction milestone is completed.', 'assistant');
+    // Voice input implementation
+    async handleVoiceInput() {
+        if (this.isRecording) {
+            await this.stopRecording();
+        } else {
+            await this.startRecording();
+        }
+    }
+
+    async startRecording() {
+        try {
+            // Request microphone permission
+            const stream = await navigator.mediaDevices.getUserMedia({
+                audio: {
+                    sampleRate: 16000,
+                    channelCount: 1,
+                    echoCancellation: true,
+                    noiseSuppression: true
+                }
+            });
+
+            this.mediaRecorder = new MediaRecorder(stream, {
+                mimeType: 'audio/webm;codecs=opus'
+            });
+
+            this.audioChunks = [];
+            this.isRecording = true;
+
+            // Update UI
+            this.updateVoiceButton();
+            this.setStatus('recording', 'Recording...');
+
+            this.mediaRecorder.ondataavailable = (event) => {
+                if (event.data.size > 0) {
+                    this.audioChunks.push(event.data);
+                }
+            };
+
+            this.mediaRecorder.onstop = async () => {
+                const audioBlob = new Blob(this.audioChunks, { type: 'audio/webm' });
+                await this.processVoiceInput(audioBlob);
+
+                // Stop all tracks to release microphone
+                stream.getTracks().forEach(track => track.stop());
+            };
+
+            this.mediaRecorder.start();
+
+        } catch (error) {
+            console.error('Error starting recording:', error);
+            this.setStatus('error', 'Microphone access denied');
+            this.addMessage('Unable to access microphone. Please check permissions and try again.', 'assistant', true);
+        }
+    }
+
+    async stopRecording() {
+        if (this.mediaRecorder && this.isRecording) {
+            this.mediaRecorder.stop();
+            this.isRecording = false;
+            this.updateVoiceButton();
+            this.setStatus('processing', 'Processing voice...');
+        }
+    }
+
+    updateVoiceButton() {
+        const voiceBtn = document.getElementById('voiceBtn');
+        if (this.isRecording) {
+            voiceBtn.classList.add('recording');
+            voiceBtn.title = 'Stop recording';
+            voiceBtn.style.backgroundColor = '#ef4444';
+            voiceBtn.style.color = 'white';
+        } else {
+            voiceBtn.classList.remove('recording');
+            voiceBtn.title = 'Voice input';
+            voiceBtn.style.backgroundColor = '';
+            voiceBtn.style.color = '';
+        }
+    }
+
+    async processVoiceInput(audioBlob) {
+        try {
+            // Convert audio blob to base64
+            const arrayBuffer = await audioBlob.arrayBuffer();
+            const base64Audio = btoa(String.fromCharCode(...new Uint8Array(arrayBuffer)));
+
+            // Send to voice API
+            const response = await fetch(`${this.apiBaseUrl}/voice`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    audio_data: base64Audio,
+                    format: 'webm',
+                    language: 'en-US',
+                    sample_rate: 16000,
+                    include_audio_response: true,
+                    system_prompt: 'You are AI Copilot, a helpful voice assistant. Provide concise, clear responses suitable for audio playback.'
+                })
+            });
+
+            if (!response.ok) {
+                const errorData = await response.json().catch(() => ({}));
+                throw new Error(errorData.detail || `HTTP ${response.status}: ${response.statusText}`);
+            }
+
+            const data = await response.json();
+
+            // Add transcription as user message
+            if (data.transcription) {
+                this.addMessage(data.transcription, 'user');
+            }
+
+            // Add LLM response as assistant message
+            if (data.llm_response) {
+                this.addMessage(data.llm_response, 'assistant');
+            }
+
+            // Play audio response if available
+            if (data.audio_data) {
+                await this.playAudioResponse(data.audio_data, data.audio_format);
+            }
+
+            this.setStatus('ready', 'Voice processed');
+
+        } catch (error) {
+            console.error('Error processing voice input:', error);
+            this.setStatus('error', 'Voice processing failed');
+
+            let errorMessage = 'Sorry, I had trouble processing your voice input.';
+            if (error.message.includes('Failed to fetch')) {
+                errorMessage = 'Unable to connect to voice service. Please check that the backend server is running.';
+            } else if (error.message.includes('No speech detected')) {
+                errorMessage = 'No speech detected. Please try speaking more clearly.';
+            }
+
+            this.addMessage(errorMessage, 'assistant', true);
+        }
+    }
+
+    async playAudioResponse(base64Audio, format) {
+        try {
+            // Convert base64 to blob
+            const binaryString = atob(base64Audio);
+            const bytes = new Uint8Array(binaryString.length);
+            for (let i = 0; i < binaryString.length; i++) {
+                bytes[i] = binaryString.charCodeAt(i);
+            }
+            const audioBlob = new Blob([bytes], { type: `audio/${format}` });
+
+            // Create audio URL and play
+            const audioUrl = URL.createObjectURL(audioBlob);
+            const audio = new Audio(audioUrl);
+
+            audio.onended = () => {
+                URL.revokeObjectURL(audioUrl);
+            };
+
+            await audio.play();
+
+        } catch (error) {
+            console.error('Error playing audio response:', error);
+        }
     }
 
     // Screenshot (placeholder)

@@ -57,12 +57,13 @@ class AICopilotApp {
       show: false, // Start hidden
       frame: true,
       resizable: true,
+      skipTaskbar: false, // Ensure app appears in taskbar/dock
       webPreferences: {
         nodeIntegration: true,
         contextIsolation: false,
         enableRemoteModule: true
-      }
-      // icon: this.getIconPath() // Skip icon for now to avoid errors
+      },
+      icon: this.getIconPath() // Re-enable icon
     });
 
     // Load the app
@@ -77,8 +78,15 @@ class AICopilotApp {
     });
 
     this.mainWindow.on('minimize', (event) => {
-      event.preventDefault();
-      this.hideWindow();
+      // On macOS, allow normal minimize behavior to keep icon in dock
+      if (process.platform === 'darwin') {
+        // Don't prevent default - let it minimize normally
+        return;
+      } else {
+        // On other platforms, hide to tray
+        event.preventDefault();
+        this.hideWindow();
+      }
     });
 
     // Show window when ready
@@ -174,10 +182,11 @@ class AICopilotApp {
   hideWindow() {
     if (this.mainWindow) {
       this.mainWindow.hide();
-      
-      // Hide from dock on macOS
+
+      // Keep app visible in dock on macOS for better UX
       if (process.platform === 'darwin') {
-        app.dock.hide();
+        // Don't hide from dock - users expect to see the app icon
+        // app.dock.hide(); // Commented out to fix disappearing icon issue
       }
     }
   }
