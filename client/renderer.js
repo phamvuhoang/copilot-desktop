@@ -1,5 +1,4 @@
 const { ipcRenderer } = require('electron');
-const clientConfig = require('./config.js');
 
 class AICopilotRenderer {
     constructor() {
@@ -12,8 +11,10 @@ class AICopilotRenderer {
 
         this.isProcessing = false;
         this.messageHistory = [];
-        this.apiBaseUrl = clientConfig.getApiBaseUrl();
+        this.apiBaseUrl = window.clientConfig ? window.clientConfig.getApiBaseUrl() : 'http://127.0.0.1:8000/api/v1';
         this.failedMessages = new Map(); // Store failed messages for retry
+
+        console.log('AICopilotRenderer constructor - API Base URL:', this.apiBaseUrl);
 
         // Voice functionality
         this.isRecording = false;
@@ -33,6 +34,8 @@ class AICopilotRenderer {
     }
 
     setupUI() {
+        console.log('Setting up UI...');
+
         // Get DOM elements
         this.messageInput = document.getElementById('messageInput');
         this.chatHistory = document.getElementById('chatHistory');
@@ -41,9 +44,18 @@ class AICopilotRenderer {
         this.charCount = document.querySelector('.char-count');
         this.loadingOverlay = document.getElementById('loadingOverlay');
 
+        console.log('DOM elements found:', {
+            messageInput: !!this.messageInput,
+            chatHistory: !!this.chatHistory,
+            sendBtn: !!this.sendBtn,
+            statusIndicator: !!this.statusIndicator,
+            charCount: !!this.charCount,
+            loadingOverlay: !!this.loadingOverlay
+        });
+
         // Setup event listeners
         this.setupEventListeners();
-        
+
         // Initialize UI state
         this.updateUI();
 
@@ -54,26 +66,33 @@ class AICopilotRenderer {
     }
 
     setupEventListeners() {
-        // Message input events
-        this.messageInput.addEventListener('input', () => this.handleInputChange());
+        console.log('Setting up event listeners...');
+
+        // Message input events - combine input handlers
+        this.messageInput.addEventListener('input', () => {
+            this.handleInputChange();
+            this.autoResizeTextarea();
+        });
         this.messageInput.addEventListener('keydown', (e) => this.handleKeyDown(e));
-        
+
         // Button events
-        this.sendBtn.addEventListener('click', () => this.sendMessage());
+        this.sendBtn.addEventListener('click', () => {
+            console.log('Send button clicked');
+            this.sendMessage();
+        });
         document.getElementById('minimizeBtn').addEventListener('click', () => this.hideWindow());
         document.getElementById('settingsBtn').addEventListener('click', () => this.openSettings());
-        
+
         // Voice and screenshot buttons (disabled for now)
         document.getElementById('voiceBtn').addEventListener('click', () => this.handleVoiceInput());
         document.getElementById('screenshotBtn').addEventListener('click', () => this.handleScreenshot());
-        
-        // Auto-resize textarea
-        this.messageInput.addEventListener('input', () => this.autoResizeTextarea());
-        
+
         // Focus input when window is shown
         window.addEventListener('focus', () => {
             setTimeout(() => this.messageInput.focus(), 100);
         });
+
+        console.log('Event listeners set up successfully');
     }
 
     handleInputChange() {
@@ -97,14 +116,20 @@ class AICopilotRenderer {
     }
 
     handleKeyDown(e) {
+        console.log('Key pressed:', e.key, 'Shift:', e.shiftKey);
+
         // Send message on Enter (without Shift)
         if (e.key === 'Enter' && !e.shiftKey) {
+            console.log('Enter key detected, preventing default and sending message');
             e.preventDefault();
             if (!this.sendBtn.disabled) {
+                console.log('Send button not disabled, calling sendMessage');
                 this.sendMessage();
+            } else {
+                console.log('Send button is disabled');
             }
         }
-        
+
         // Hide window on Escape
         if (e.key === 'Escape') {
             this.hideWindow();
@@ -118,8 +143,14 @@ class AICopilotRenderer {
     }
 
     async sendMessage() {
+        console.log('sendMessage called');
         const message = this.messageInput.value.trim();
-        if (!message || this.isProcessing) return;
+        console.log('Message content:', message);
+        console.log('Is processing:', this.isProcessing);
+        if (!message || this.isProcessing) {
+            console.log('Returning early - no message or processing');
+            return;
+        }
 
         // Add user message to chat
         this.addMessage(message, 'user');
