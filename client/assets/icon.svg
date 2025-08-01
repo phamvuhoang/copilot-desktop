@@ -1,0 +1,40 @@
+<svg width="256" height="256" viewBox="0 0 256 256" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Background circle -->
+  <circle cx="128" cy="128" r="120" fill="url(#gradient)" stroke="#4A5568" stroke-width="4"/>
+  
+  <!-- Robot head -->
+  <rect x="88" y="80" width="80" height="60" rx="12" fill="#FFFFFF" stroke="#4A5568" stroke-width="2"/>
+  
+  <!-- Eyes -->
+  <circle cx="108" cy="105" r="8" fill="#667EEA"/>
+  <circle cx="148" cy="105" r="8" fill="#667EEA"/>
+  
+  <!-- Mouth -->
+  <rect x="118" y="120" width="20" height="4" rx="2" fill="#4A5568"/>
+  
+  <!-- Antenna -->
+  <line x1="128" y1="80" x2="128" y2="60" stroke="#4A5568" stroke-width="3" stroke-linecap="round"/>
+  <circle cx="128" cy="55" r="5" fill="#667EEA"/>
+  
+  <!-- Body -->
+  <rect x="98" y="140" width="60" height="80" rx="8" fill="#FFFFFF" stroke="#4A5568" stroke-width="2"/>
+  
+  <!-- Chest panel -->
+  <rect x="108" y="155" width="40" height="30" rx="4" fill="#F7FAFC" stroke="#E2E8F0" stroke-width="1"/>
+  
+  <!-- Arms -->
+  <rect x="70" y="150" width="25" height="40" rx="12" fill="#FFFFFF" stroke="#4A5568" stroke-width="2"/>
+  <rect x="161" y="150" width="25" height="40" rx="12" fill="#FFFFFF" stroke="#4A5568" stroke-width="2"/>
+  
+  <!-- Hands -->
+  <circle cx="82" cy="200" r="8" fill="#FFFFFF" stroke="#4A5568" stroke-width="2"/>
+  <circle cx="174" cy="200" r="8" fill="#FFFFFF" stroke="#4A5568" stroke-width="2"/>
+  
+  <!-- Gradient definition -->
+  <defs>
+    <linearGradient id="gradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#667EEA;stop-opacity:0.1"/>
+      <stop offset="100%" style="stop-color:#764BA2;stop-opacity:0.1"/>
+    </linearGradient>
+  </defs>
+</svg>
