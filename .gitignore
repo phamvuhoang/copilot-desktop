@@ -368,3 +368,5 @@ local/
 # Documentation
 *.markdown
 *.md
+
+*key.json

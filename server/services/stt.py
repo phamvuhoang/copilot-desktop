@@ -27,10 +27,29 @@ class STTService:
             if self.google_config["credentials_path"]:
                 # Use service account credentials
                 import os
-                os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = self.google_config["credentials_path"]
-            
+                credentials_path = self.google_config["credentials_path"]
+                print(f"Setting GOOGLE_APPLICATION_CREDENTIALS to: {credentials_path}")
+                os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = credentials_path
+
+                # Verify the file exists
+                if not os.path.exists(credentials_path):
+                    raise Exception(f"Credentials file not found: {credentials_path}")
+
             self.client = speech.SpeechClient()
             print("Google Cloud Speech-to-Text client initialized successfully")
+
+            # Test basic client functionality
+            try:
+                # Just verify we can create a basic config object
+                test_config = speech.RecognitionConfig(
+                    encoding=speech.RecognitionConfig.AudioEncoding.LINEAR16,
+                    sample_rate_hertz=16000,
+                    language_code="en-US"
+                )
+                print(f"STT client test successful - config creation works")
+            except Exception as test_error:
+                print(f"STT client test failed: {test_error}")
+
         except Exception as e:
             print(f"Failed to initialize STT client: {e}")
             self.client = None
@@ -61,38 +80,75 @@ class STTService:
             # Configure audio settings
             language_code = language_code or self.config["language_code"]
             sample_rate = sample_rate or self.config["sample_rate_hertz"]
-            
+
+            # Check if audio data is too small
+            if len(audio_data) < 100:  # Very small audio files are likely invalid
+                return {
+                    "text": "",
+                    "confidence": 0.0,
+                    "alternatives": [],
+                    "words": [],
+                    "language_code": language_code,
+                    "error": "Audio data too small or invalid"
+                }
+
             # Determine encoding based on format
+            # According to latest Google Cloud Speech-to-Text documentation
             encoding_map = {
                 "wav": speech.RecognitionConfig.AudioEncoding.LINEAR16,
-                "mp3": speech.RecognitionConfig.AudioEncoding.MP3,
                 "flac": speech.RecognitionConfig.AudioEncoding.FLAC,
-                "webm": speech.RecognitionConfig.AudioEncoding.WEBM_OPUS
+                "webm": speech.RecognitionConfig.AudioEncoding.WEBM_OPUS,
+                "ogg": speech.RecognitionConfig.AudioEncoding.OGG_OPUS,
+                "mulaw": speech.RecognitionConfig.AudioEncoding.MULAW,
+                "amr": speech.RecognitionConfig.AudioEncoding.AMR,
+                "amr_wb": speech.RecognitionConfig.AudioEncoding.AMR_WB
             }
-            
+
+            # MP3 is only available in v1p1beta1 (beta), not in stable v1
+            # For now, we'll convert MP3 to a supported format or reject it
+            if audio_format.lower() == "mp3":
+                return {
+                    "text": "",
+                    "confidence": 0.0,
+                    "alternatives": [],
+                    "words": [],
+                    "language_code": language_code,
+                    "error": "MP3 format not supported in stable API. Please use WAV, FLAC, or WEBM format."
+                }
+
             encoding = encoding_map.get(audio_format.lower(), speech.RecognitionConfig.AudioEncoding.LINEAR16)
-            
+
             # Configure recognition
-            config = speech.RecognitionConfig(
-                encoding=encoding,
-                sample_rate_hertz=sample_rate,
-                language_code=language_code,
-                enable_automatic_punctuation=True,
-                enable_word_confidence=True,
-                enable_word_time_offsets=True
-            )
-            
+            # For audio files with headers (WAV, WEBM), omit sample_rate_hertz to let Google auto-detect
+            # This prevents sample rate mismatch errors
+            config_params = {
+                "encoding": encoding,
+                "language_code": language_code,
+                "enable_automatic_punctuation": True,
+                "enable_word_confidence": True,
+                "enable_word_time_offsets": True
+            }
+
+            # For formats with headers (WAV, FLAC, WEBM), omit sample_rate_hertz to let Google auto-detect
+            # This prevents sample rate mismatch errors as per Google Cloud documentation
+            formats_with_headers = ["wav", "flac", "webm", "ogg"]
+            if audio_format.lower() not in formats_with_headers:
+                config_params["sample_rate_hertz"] = sample_rate
+
+            config = speech.RecognitionConfig(**config_params)
             audio = speech.RecognitionAudio(content=audio_data)
-            
+
             # Perform transcription
             response = self.client.recognize(config=config, audio=audio)
-            
+
             # Process results
             if not response.results:
                 return {
                     "text": "",
                     "confidence": 0.0,
                     "alternatives": [],
+                    "words": [],
+                    "language_code": language_code,
                     "error": "No speech detected"
                 }
             
@@ -149,7 +205,7 @@ class STTService:
     
     def get_supported_formats(self) -> list:
         """Get list of supported audio formats"""
-        return ["wav", "mp3", "flac", "webm"]
+        return ["wav", "flac", "webm", "ogg", "mulaw", "amr", "amr_wb"]
     
     def get_supported_languages(self) -> list:
         """Get list of supported language codes"""
