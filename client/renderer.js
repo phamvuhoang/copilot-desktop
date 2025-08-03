@@ -173,9 +173,8 @@ class AICopilotRenderer {
         this.setProcessingState(true);
         
         try {
-            // Send to backend API
-            const response = await this.sendToAPI(message);
-            this.addMessage(response.message, 'assistant');
+            // Use the new process endpoint for enhanced command processing
+            await this.processCommand(message, 'text');
 
         } catch (error) {
             console.error('Error sending message:', error);
@@ -197,6 +196,105 @@ class AICopilotRenderer {
         } finally {
             this.setProcessingState(false);
         }
+    }
+
+    // Enhanced command processing using the new /process endpoint
+    async processCommand(input, inputType = 'text', audioData = null) {
+        try {
+            this.setStatus('processing', 'Processing command...');
+
+            const requestBody = {
+                input_type: inputType,
+                conversation_history: this.messageHistory
+                    .filter(msg => msg.sender !== 'system')
+                    .slice(-10) // Keep last 10 messages for context
+                    .map(msg => ({
+                        role: msg.sender === 'user' ? 'user' : 'assistant',
+                        content: msg.content,
+                        timestamp: msg.timestamp
+                    })),
+                include_audio_response: inputType === 'audio', // Enable audio response for voice input
+                language: 'en-US'
+            };
+
+            if (inputType === 'text') {
+                requestBody.text = input;
+            } else if (inputType === 'audio') {
+                requestBody.audio_data = audioData;
+            }
+
+            const response = await fetch(`${this.apiBaseUrl}/process`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(requestBody)
+            });
+
+            if (!response.ok) {
+                const errorData = await response.json().catch(() => ({}));
+                throw new Error(errorData.detail || `HTTP ${response.status}: ${response.statusText}`);
+            }
+
+            const data = await response.json();
+
+            // For audio input, add the transcribed text as user message
+            if (inputType === 'audio' && data.transcription) {
+                this.addMessage(data.transcription, 'user');
+            }
+
+            // Handle different response types
+            if (data.action) {
+                // Handle action commands
+                await this.handleActionCommand(data.action, data.query, data.intent);
+            } else if (data.response) {
+                // Handle direct responses
+                this.addMessage(data.response, 'assistant');
+
+                // Play audio response if available
+                if (data.audio_data && data.audio_format) {
+                    await this.playAudioResponse(data.audio_data, data.audio_format);
+                }
+            }
+
+            this.setStatus('ready', 'Command processed');
+
+        } catch (error) {
+            console.error('Error processing command:', error);
+            throw error; // Re-throw to be handled by caller
+        }
+    }
+
+    // Handle action commands from the process endpoint
+    async handleActionCommand(action, query, intent) {
+        try {
+            switch (action) {
+                case 'take_screenshot':
+                    this.setStatus('processing', 'Taking screenshot...');
+                    await this.captureAndSendScreenshot(query);
+                    break;
+
+                case 'open_application':
+                    this.setStatus('processing', 'Opening application...');
+                    await this.handleOpenApplication(query);
+                    break;
+
+                default:
+                    console.warn(`Unknown action: ${action}`);
+                    this.addMessage(`I understand you want me to ${action}, but I don't know how to do that yet.`, 'assistant', true);
+                    break;
+            }
+        } catch (error) {
+            console.error(`Error handling action ${action}:`, error);
+            this.addMessage(`Sorry, I had trouble executing that command: ${error.message}`, 'assistant', true);
+        }
+    }
+
+    // Handle application opening (placeholder for future implementation)
+    async handleOpenApplication(query) {
+        // For now, just acknowledge the request
+        this.addMessage(`I understand you want to open an application, but this feature is not yet implemented. You asked: "${query}"`, 'assistant');
+        this.setStatus('ready', 'Application opening not yet supported');
     }
 
     async sendToAPI(message) {
@@ -528,43 +626,8 @@ class AICopilotRenderer {
             const arrayBuffer = await audioBlob.arrayBuffer();
             const base64Audio = btoa(String.fromCharCode(...new Uint8Array(arrayBuffer)));
 
-            // Send to voice API
-            const response = await fetch(`${this.apiBaseUrl}/voice`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                    audio_data: base64Audio,
-                    format: 'webm',
-                    language: 'en-US',
-                    sample_rate: 16000,
-                    include_audio_response: true,
-                    system_prompt: 'You are AI Copilot, a helpful voice assistant. Provide concise, clear responses suitable for audio playback.'
-                })
-            });
-
-            if (!response.ok) {
-                const errorData = await response.json().catch(() => ({}));
-                throw new Error(errorData.detail || `HTTP ${response.status}: ${response.statusText}`);
-            }
-
-            const data = await response.json();
-
-            // Add transcription as user message
-            if (data.transcription) {
-                this.addMessage(data.transcription, 'user');
-            }
-
-            // Add LLM response as assistant message
-            if (data.llm_response) {
-                this.addMessage(data.llm_response, 'assistant');
-            }
-
-            // Play audio response if available
-            if (data.audio_data) {
-                await this.playAudioResponse(data.audio_data, data.audio_format);
-            }
+            // Use the new process endpoint for enhanced voice command processing
+            await this.processCommand(null, 'audio', base64Audio);
 
             this.setStatus('ready', 'Voice processed');
 
@@ -577,6 +640,8 @@ class AICopilotRenderer {
                 errorMessage = 'Unable to connect to voice service. Please check that the backend server is running.';
             } else if (error.message.includes('No speech detected')) {
                 errorMessage = 'No speech detected. Please try speaking more clearly.';
+            } else if (error.message.includes('Speech-to-Text service not available')) {
+                errorMessage = 'Voice recognition service is not available. Please check the configuration.';
             }
 
             this.addMessage(errorMessage, 'assistant', true);
@@ -817,6 +882,153 @@ class AICopilotRenderer {
                 errorMessage = 'Unable to connect to screenshot service. Please check that the backend server is running.';
             } else if (error.message.includes('OCR service not available')) {
                 errorMessage = 'Screenshot analysis service is not available. Please check Google Cloud Vision configuration.';
+            }
+
+            this.addMessage(errorMessage, 'assistant', true);
+        }
+    }
+
+    // Automated screenshot capture (without preview)
+    async captureAndSendScreenshot(query) {
+        try {
+            this.setStatus('processing', 'Capturing screenshot automatically...');
+
+            // Check screen recording permission first
+            const permissionStatus = await window.electronAPI.checkScreenPermission();
+            if (!permissionStatus.hasPermission) {
+                throw new Error('Screen recording permission required. Please grant permission and try again.');
+            }
+
+            // Request screen capture permission and capture screenshot
+            const sources = await window.electronAPI.getScreenSources();
+
+            if (!sources || sources.length === 0) {
+                throw new Error('No screen sources available');
+            }
+
+            // Use the first screen source (primary display)
+            const primarySource = sources.find(source => source.name === 'Entire Screen') || sources[0];
+
+            // Capture screenshot using getUserMedia
+            const stream = await navigator.mediaDevices.getUserMedia({
+                audio: false,
+                video: {
+                    mandatory: {
+                        chromeMediaSource: 'desktop',
+                        chromeMediaSourceId: primarySource.id,
+                        minWidth: 1280,
+                        maxWidth: 1920,
+                        minHeight: 720,
+                        maxHeight: 1080
+                    }
+                }
+            });
+
+            // Create video element to capture frame
+            const video = document.createElement('video');
+            video.srcObject = stream;
+            video.play();
+
+            // Wait for video to load
+            await new Promise((resolve) => {
+                video.onloadedmetadata = resolve;
+            });
+
+            // Create canvas and capture frame
+            const canvas = document.createElement('canvas');
+
+            // Optimize canvas size for better performance
+            const maxWidth = 1920;
+            const maxHeight = 1080;
+            const aspectRatio = video.videoWidth / video.videoHeight;
+
+            let canvasWidth = video.videoWidth;
+            let canvasHeight = video.videoHeight;
+
+            // Scale down if image is too large
+            if (canvasWidth > maxWidth) {
+                canvasWidth = maxWidth;
+                canvasHeight = maxWidth / aspectRatio;
+            }
+            if (canvasHeight > maxHeight) {
+                canvasHeight = maxHeight;
+                canvasWidth = maxHeight * aspectRatio;
+            }
+
+            canvas.width = canvasWidth;
+            canvas.height = canvasHeight;
+            const ctx = canvas.getContext('2d');
+
+            // Use high-quality image rendering
+            ctx.imageSmoothingEnabled = true;
+            ctx.imageSmoothingQuality = 'high';
+            ctx.drawImage(video, 0, 0, canvasWidth, canvasHeight);
+
+            // Stop the stream
+            stream.getTracks().forEach(track => track.stop());
+
+            // Convert to blob with compression for better performance
+            const blob = await new Promise(resolve => {
+                canvas.toBlob(resolve, 'image/jpeg', 0.85); // Use JPEG with 85% quality for better compression
+            });
+
+            this.setStatus('processing', 'Analyzing screenshot...');
+
+            // Convert blob to base64 using FileReader
+            const base64Image = await new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = () => {
+                    // Remove the data URL prefix (data:image/jpeg;base64,)
+                    const base64 = reader.result.split(',')[1];
+                    resolve(base64);
+                };
+                reader.onerror = reject;
+                reader.readAsDataURL(blob);
+            });
+
+            // Send to screenshot API
+            const response = await fetch(`${this.apiBaseUrl}/screenshot`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    image_data: base64Image,
+                    query: query,
+                    image_format: 'jpeg',
+                    use_structured_ocr: false,
+                    language_hints: ['en']
+                })
+            });
+
+            if (!response.ok) {
+                const errorData = await response.json().catch(() => ({}));
+                throw new Error(errorData.detail || `HTTP ${response.status}: ${response.statusText}`);
+            }
+
+            const data = await response.json();
+
+            // Add query as user message
+            this.addMessage(query, 'user');
+
+            // Add analysis result as assistant message
+            if (data.analysis) {
+                this.addMessage(data.analysis, 'assistant');
+            }
+
+            this.setStatus('ready', 'Screenshot analyzed');
+
+        } catch (error) {
+            console.error('Error in automated screenshot capture:', error);
+            this.setStatus('error', 'Automated screenshot capture failed');
+
+            let errorMessage = 'Sorry, I had trouble capturing and analyzing the screenshot.';
+            if (error.message.includes('Failed to fetch')) {
+                errorMessage = 'Unable to connect to screenshot service. Please check that the backend server is running.';
+            } else if (error.message.includes('Permission denied')) {
+                errorMessage = 'Screen capture permission denied. Please grant permission in your system settings and try again.';
+            } else if (error.message.includes('No screen sources')) {
+                errorMessage = 'No screen sources available. Please check your system permissions.';
             }
 
             this.addMessage(errorMessage, 'assistant', true);
