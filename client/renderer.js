@@ -1,4 +1,4 @@
-const { ipcRenderer } = require('electron');
+// No direct require needed - we use window.electronAPI from preload script
 
 class AICopilotRenderer {
     constructor() {
@@ -83,9 +83,18 @@ class AICopilotRenderer {
         document.getElementById('minimizeBtn').addEventListener('click', () => this.hideWindow());
         document.getElementById('settingsBtn').addEventListener('click', () => this.openSettings());
 
-        // Voice and screenshot buttons (disabled for now)
+        // Voice and screenshot buttons
         document.getElementById('voiceBtn').addEventListener('click', () => this.handleVoiceInput());
         document.getElementById('screenshotBtn').addEventListener('click', () => this.handleScreenshot());
+
+        // Screenshot preview controls
+        document.getElementById('screenshotClose').addEventListener('click', () => this.closeScreenshotPreview());
+        document.getElementById('analyzeScreenshot').addEventListener('click', () => this.analyzeScreenshot());
+        document.getElementById('screenshotQuery').addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                this.analyzeScreenshot();
+            }
+        });
 
         // Focus input when window is shown
         window.addEventListener('focus', () => {
@@ -425,7 +434,7 @@ class AICopilotRenderer {
 
     // Window controls
     hideWindow() {
-        ipcRenderer.invoke('hide-window');
+        window.electronAPI.hideWindow();
     }
 
     openSettings() {
@@ -599,10 +608,219 @@ class AICopilotRenderer {
         }
     }
 
-    // Screenshot (placeholder)
-    handleScreenshot() {
-        console.log('Screenshot not yet implemented');
-        this.addMessage('Screenshot analysis will be available once the screenshot capture milestone is completed.', 'assistant');
+    // Screenshot functionality
+    async handleScreenshot() {
+        try {
+            this.setStatus('processing', 'Checking permissions...');
+
+            // Check screen recording permission first
+            const permissionStatus = await window.electronAPI.checkScreenPermission();
+            if (!permissionStatus.hasPermission) {
+                throw new Error('Screen recording permission required. Please grant permission and try again.');
+            }
+
+            this.setStatus('processing', 'Capturing screenshot...');
+
+            // Request screen capture permission and capture screenshot
+            const sources = await window.electronAPI.getScreenSources();
+
+            if (!sources || sources.length === 0) {
+                throw new Error('No screen sources available');
+            }
+
+            // Use the first screen source (primary display)
+            const primarySource = sources.find(source => source.name === 'Entire Screen') || sources[0];
+
+            // Capture screenshot using getUserMedia
+            const stream = await navigator.mediaDevices.getUserMedia({
+                audio: false,
+                video: {
+                    mandatory: {
+                        chromeMediaSource: 'desktop',
+                        chromeMediaSourceId: primarySource.id,
+                        minWidth: 1280,
+                        maxWidth: 1920,
+                        minHeight: 720,
+                        maxHeight: 1080
+                    }
+                }
+            });
+
+            // Create video element to capture frame
+            const video = document.createElement('video');
+            video.srcObject = stream;
+            video.play();
+
+            // Wait for video to load
+            await new Promise((resolve) => {
+                video.onloadedmetadata = resolve;
+            });
+
+            // Create canvas and capture frame
+            const canvas = document.createElement('canvas');
+
+            // Optimize canvas size for better performance
+            const maxWidth = 1920;
+            const maxHeight = 1080;
+            const aspectRatio = video.videoWidth / video.videoHeight;
+
+            let canvasWidth = video.videoWidth;
+            let canvasHeight = video.videoHeight;
+
+            // Scale down if image is too large
+            if (canvasWidth > maxWidth) {
+                canvasWidth = maxWidth;
+                canvasHeight = maxWidth / aspectRatio;
+            }
+            if (canvasHeight > maxHeight) {
+                canvasHeight = maxHeight;
+                canvasWidth = maxHeight * aspectRatio;
+            }
+
+            canvas.width = canvasWidth;
+            canvas.height = canvasHeight;
+            const ctx = canvas.getContext('2d');
+
+            // Use high-quality image rendering
+            ctx.imageSmoothingEnabled = true;
+            ctx.imageSmoothingQuality = 'high';
+            ctx.drawImage(video, 0, 0, canvasWidth, canvasHeight);
+
+            // Stop the stream
+            stream.getTracks().forEach(track => track.stop());
+
+            // Convert to blob with compression for better performance
+            const blob = await new Promise(resolve => {
+                canvas.toBlob(resolve, 'image/jpeg', 0.85); // Use JPEG with 85% quality for better compression
+            });
+            const imageUrl = URL.createObjectURL(blob);
+
+            // Store screenshot data
+            this.currentScreenshot = {
+                blob: blob,
+                url: imageUrl
+            };
+
+            // Show screenshot preview
+            this.showScreenshotPreview(imageUrl);
+            this.setStatus('ready', 'Screenshot captured');
+
+        } catch (error) {
+            console.error('Error capturing screenshot:', error);
+            this.setStatus('error', 'Screenshot capture failed');
+
+            let errorMessage = 'Failed to capture screenshot.';
+            if (error.message.includes('Permission denied')) {
+                errorMessage = 'Screen capture permission denied. Please grant permission in your system settings and try again.';
+            } else if (error.message.includes('No screen sources')) {
+                errorMessage = 'No screen sources available. Please check your system permissions.';
+            }
+
+            this.addMessage(errorMessage, 'assistant', true);
+        }
+    }
+
+    showScreenshotPreview(imageUrl) {
+        const preview = document.getElementById('screenshotPreview');
+        const image = document.getElementById('screenshotImage');
+        const queryInput = document.getElementById('screenshotQuery');
+
+        image.src = imageUrl;
+        queryInput.value = '';
+        preview.style.display = 'block';
+
+        // Focus on query input
+        setTimeout(() => queryInput.focus(), 100);
+    }
+
+    closeScreenshotPreview() {
+        const preview = document.getElementById('screenshotPreview');
+        preview.style.display = 'none';
+
+        // Clean up screenshot data
+        if (this.currentScreenshot) {
+            URL.revokeObjectURL(this.currentScreenshot.url);
+            this.currentScreenshot = null;
+        }
+    }
+
+    async analyzeScreenshot() {
+        if (!this.currentScreenshot) {
+            this.addMessage('No screenshot available to analyze.', 'assistant', true);
+            return;
+        }
+
+        const queryInput = document.getElementById('screenshotQuery');
+        const query = queryInput.value.trim();
+
+        if (!query) {
+            this.addMessage('Please enter a question about the screenshot.', 'assistant', true);
+            queryInput.focus();
+            return;
+        }
+
+        try {
+            this.setStatus('processing', 'Analyzing screenshot...');
+
+            // Convert blob to base64 using FileReader to avoid stack overflow
+            const base64Image = await new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = () => {
+                    // Remove the data URL prefix (data:image/jpeg;base64,)
+                    const base64 = reader.result.split(',')[1];
+                    resolve(base64);
+                };
+                reader.onerror = reject;
+                reader.readAsDataURL(this.currentScreenshot.blob);
+            });
+
+            // Send to screenshot API
+            const response = await fetch(`${this.apiBaseUrl}/screenshot`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    image_data: base64Image,
+                    query: query,
+                    image_format: 'jpeg', // Use JPEG format for better performance
+                    use_structured_ocr: false, // Use basic OCR for faster processing
+                    language_hints: ['en'] // Hint for English to speed up OCR
+                })
+            });
+
+            if (!response.ok) {
+                const errorData = await response.json().catch(() => ({}));
+                throw new Error(errorData.detail || `HTTP ${response.status}: ${response.statusText}`);
+            }
+
+            const data = await response.json();
+
+            // Add query as user message
+            this.addMessage(query, 'user');
+
+            // Add analysis result as assistant message
+            if (data.analysis) {
+                this.addMessage(data.analysis, 'assistant');
+            }
+
+            // Close preview
+            this.closeScreenshotPreview();
+            this.setStatus('ready', 'Screenshot analyzed');
+
+        } catch (error) {
+            console.error('Error analyzing screenshot:', error);
+            this.setStatus('error', 'Screenshot analysis failed');
+
+            let errorMessage = 'Sorry, I had trouble analyzing the screenshot.';
+            if (error.message.includes('Failed to fetch')) {
+                errorMessage = 'Unable to connect to screenshot service. Please check that the backend server is running.';
+            } else if (error.message.includes('OCR service not available')) {
+                errorMessage = 'Screenshot analysis service is not available. Please check Google Cloud Vision configuration.';
+            }
+
+            this.addMessage(errorMessage, 'assistant', true);
+        }
     }
 
     // Utility methods
@@ -625,8 +843,8 @@ class AICopilotRenderer {
                 <p>I'm here to help you with any questions or tasks. You can:</p>
                 <ul>
                     <li>Type your questions in the chat</li>
-                    <li>Use voice input (coming soon)</li>
-                    <li>Share screenshots for analysis (coming soon)</li>
+                    <li>Use voice input with the microphone button</li>
+                    <li>Share screenshots for analysis with the camera button</li>
                 </ul>
                 <p class="shortcut-hint">Press <kbd>Ctrl+Shift+C</kbd> to show/hide this window</p>
             </div>

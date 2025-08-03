@@ -337,21 +337,134 @@ kbd {
     50% { opacity: 0.5; }
 }
 
+/* Screenshot Preview */
+.screenshot-preview {
+    background: rgba(255, 255, 255, 0.95);
+    border-top: 1px solid rgba(0, 0, 0, 0.1);
+    padding: 16px;
+    max-height: 300px;
+    overflow-y: auto;
+    animation: slideUp 0.3s ease;
+}
+
+.screenshot-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 12px;
+}
+
+.screenshot-title {
+    font-weight: 600;
+    color: #4a5568;
+    font-size: 14px;
+}
+
+.screenshot-close {
+    background: none;
+    border: none;
+    font-size: 20px;
+    color: #6b7280;
+    cursor: pointer;
+    padding: 4px;
+    border-radius: 4px;
+    transition: all 0.2s ease;
+}
+
+.screenshot-close:hover {
+    background: rgba(0, 0, 0, 0.05);
+    color: #374151;
+}
+
+.screenshot-content {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.screenshot-image {
+    max-width: 100%;
+    max-height: 200px;
+    object-fit: contain;
+    border-radius: 8px;
+    border: 1px solid #e2e8f0;
+    background: #f7fafc;
+}
+
+.screenshot-controls {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+}
+
+.screenshot-query {
+    flex: 1;
+    padding: 8px 12px;
+    border: 1px solid #e2e8f0;
+    border-radius: 6px;
+    font-size: 14px;
+    outline: none;
+    transition: border-color 0.2s ease;
+}
+
+.screenshot-query:focus {
+    border-color: #667eea;
+}
+
+.analyze-btn {
+    background: #667eea;
+    color: white;
+    border: none;
+    padding: 8px 16px;
+    border-radius: 6px;
+    font-size: 14px;
+    cursor: pointer;
+    transition: background-color 0.2s ease;
+}
+
+.analyze-btn:hover {
+    background: #5a67d8;
+}
+
+.analyze-btn:disabled {
+    background: #a0aec0;
+    cursor: not-allowed;
+}
+
+/* Voice Recording Styles */
+.voice-btn.recording {
+    animation: recordingPulse 1.5s infinite;
+}
+
+@keyframes recordingPulse {
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(1.1); }
+}
+
+@keyframes slideUp {
+    from { transform: translateY(20px); opacity: 0; }
+    to { transform: translateY(0); opacity: 1; }
+}
+
 /* Scrollbar */
-.chat-history::-webkit-scrollbar {
+.chat-history::-webkit-scrollbar,
+.screenshot-preview::-webkit-scrollbar {
     width: 6px;
 }
 
-.chat-history::-webkit-scrollbar-track {
+.chat-history::-webkit-scrollbar-track,
+.screenshot-preview::-webkit-scrollbar-track {
     background: transparent;
 }
 
-.chat-history::-webkit-scrollbar-thumb {
+.chat-history::-webkit-scrollbar-thumb,
+.screenshot-preview::-webkit-scrollbar-thumb {
     background: rgba(0, 0, 0, 0.2);
     border-radius: 3px;
 }
 
-.chat-history::-webkit-scrollbar-thumb:hover {
+.chat-history::-webkit-scrollbar-thumb:hover,
+.screenshot-preview::-webkit-scrollbar-thumb:hover {
     background: rgba(0, 0, 0, 0.3);
 }
 

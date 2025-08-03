@@ -3,6 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self' http://127.0.0.1:8000 http://localhost:8000;">
     <title>AI Copilot Desktop</title>
     <link rel="stylesheet" href="styles.css">
 </head>
@@ -39,13 +40,28 @@
                         <p>I'm here to help you with any questions or tasks. You can:</p>
                         <ul>
                             <li>Type your questions in the chat</li>
-                            <li>Use voice input (coming soon)</li>
-                            <li>Share screenshots for analysis (coming soon)</li>
+                            <li>Use voice input with the microphone button</li>
+                            <li>Share screenshots for analysis with the camera button</li>
                         </ul>
                         <p class="shortcut-hint">Press <kbd>Ctrl+Shift+C</kbd> to show/hide this window</p>
                     </div>
                 </div>
-                
+
+                <!-- Screenshot Preview Area -->
+                <div class="screenshot-preview" id="screenshotPreview" style="display: none;">
+                    <div class="screenshot-header">
+                        <span class="screenshot-title">Screenshot Preview</span>
+                        <button class="screenshot-close" id="screenshotClose" title="Close preview">×</button>
+                    </div>
+                    <div class="screenshot-content">
+                        <img id="screenshotImage" class="screenshot-image" alt="Screenshot preview" />
+                        <div class="screenshot-controls">
+                            <input type="text" id="screenshotQuery" class="screenshot-query" placeholder="Ask a question about this screenshot..." />
+                            <button id="analyzeScreenshot" class="analyze-btn">Analyze</button>
+                        </div>
+                    </div>
+                </div>
+
                 <!-- Input Area -->
                 <div class="input-area">
                     <div class="input-container">
@@ -64,7 +80,7 @@
                                     <line x1="8" y1="23" x2="16" y2="23"></line>
                                 </svg>
                             </button>
-                            <button id="screenshotBtn" class="control-btn screenshot-btn" title="Screenshot analysis (coming soon)" disabled>
+                            <button id="screenshotBtn" class="control-btn screenshot-btn" title="Capture screenshot">
                                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                     <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path>
                                     <circle cx="12" cy="13" r="4"></circle>
