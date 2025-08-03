@@ -392,7 +392,18 @@ class AICopilotRenderer {
 
         const contentDiv = document.createElement('div');
         contentDiv.className = 'message-content';
-        contentDiv.textContent = content;
+
+        // Check if content is JSON or Markdown and format it beautifully
+        const formattedContent = this.formatMessageContent(content);
+        if (formattedContent.isJson) {
+            contentDiv.innerHTML = formattedContent.html;
+            contentDiv.classList.add('json-content');
+        } else if (formattedContent.isMarkdown) {
+            contentDiv.innerHTML = formattedContent.html;
+            contentDiv.classList.add('markdown-content');
+        } else {
+            contentDiv.textContent = content;
+        }
 
         if (isError) {
             contentDiv.style.background = '#fee2e2';
@@ -404,8 +415,20 @@ class AICopilotRenderer {
         timestampDiv.className = 'message-timestamp';
         timestampDiv.textContent = new Date().toLocaleTimeString();
 
+        // Add copy button
+        const copyBtn = document.createElement('button');
+        copyBtn.className = 'copy-btn';
+        copyBtn.innerHTML = '📋';
+        copyBtn.title = 'Copy message';
+        copyBtn.onclick = () => this.copyMessage(content);
+
+        const messageHeader = document.createElement('div');
+        messageHeader.className = 'message-header';
+        messageHeader.appendChild(timestampDiv);
+        messageHeader.appendChild(copyBtn);
+
         messageDiv.appendChild(contentDiv);
-        messageDiv.appendChild(timestampDiv);
+        messageDiv.appendChild(messageHeader);
 
         // Add action buttons for failed messages
         if (isError && sender === 'assistant' && originalMessage) {
@@ -505,15 +528,14 @@ class AICopilotRenderer {
 
     setProcessingState(processing) {
         this.isProcessing = processing;
-        
+
         if (processing) {
             this.setStatus('processing', 'Processing...');
-            this.loadingOverlay.classList.remove('hidden');
+            // Remove overlay usage - use unified status indicator instead
         } else {
             this.setStatus('ready', 'Ready');
-            this.loadingOverlay.classList.add('hidden');
         }
-        
+
         this.updateUI();
     }
 
@@ -1035,7 +1057,216 @@ class AICopilotRenderer {
         }
     }
 
-    // Utility methods
+    // Message formatting and utility methods
+    formatMessageContent(content) {
+        // Try to detect and format JSON content first
+        try {
+            const trimmed = content.trim();
+            if ((trimmed.startsWith('{') && trimmed.endsWith('}')) ||
+                (trimmed.startsWith('[') && trimmed.endsWith(']'))) {
+
+                const parsed = JSON.parse(trimmed);
+                const formatted = JSON.stringify(parsed, null, 2);
+
+                return {
+                    isJson: true,
+                    isMarkdown: false,
+                    html: `<pre class="json-formatted"><code>${this.escapeHtml(formatted)}</code></pre>`
+                };
+            }
+        } catch (e) {
+            // Not valid JSON, continue to check for markdown
+        }
+
+        // Check if content contains markdown patterns
+        if (this.containsMarkdown(content)) {
+            return {
+                isJson: false,
+                isMarkdown: true,
+                html: this.renderMarkdown(content)
+            };
+        }
+
+        return {
+            isJson: false,
+            isMarkdown: false,
+            html: null
+        };
+    }
+
+    containsMarkdown(text) {
+        // Check for common markdown patterns
+        const markdownPatterns = [
+            /^#{1,6}\s+/m,           // Headers
+            /\*\*.*?\*\*/,           // Bold
+            /\*.*?\*/,               // Italic
+            /`.*?`/,                 // Inline code
+            /```[\s\S]*?```/,        // Code blocks
+            /^\s*[-*+]\s+/m,         // Unordered lists
+            /^\s*\d+\.\s+/m,         // Ordered lists
+            /\[.*?\]\(.*?\)/,        // Links
+            /^\s*>\s+/m,             // Blockquotes
+            /^\s*\|.*\|.*\|/m,       // Tables
+            /---+/,                  // Horizontal rules
+            /~~.*?~~/                // Strikethrough
+        ];
+
+        return markdownPatterns.some(pattern => pattern.test(text));
+    }
+
+    renderMarkdown(text) {
+        let html = this.escapeHtml(text);
+
+        // Headers (must be processed first)
+        html = html.replace(/^(#{1,6})\s+(.+)$/gm, (match, hashes, content) => {
+            const level = hashes.length;
+            return `<h${level} class="md-header md-h${level}">${content.trim()}</h${level}>`;
+        });
+
+        // Code blocks (must be before inline code)
+        html = html.replace(/```(\w+)?\n?([\s\S]*?)```/g, (match, lang, code) => {
+            const language = lang ? ` data-language="${lang}"` : '';
+            return `<pre class="md-code-block"${language}><code>${code.trim()}</code></pre>`;
+        });
+
+        // Inline code
+        html = html.replace(/`([^`]+)`/g, '<code class="md-inline-code">$1</code>');
+
+        // Bold (must be before italic)
+        html = html.replace(/\*\*([^*]+)\*\*/g, '<strong class="md-bold">$1</strong>');
+
+        // Italic
+        html = html.replace(/\*([^*]+)\*/g, '<em class="md-italic">$1</em>');
+
+        // Strikethrough
+        html = html.replace(/~~([^~]+)~~/g, '<del class="md-strikethrough">$1</del>');
+
+        // Links
+        html = html.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" class="md-link" target="_blank" rel="noopener noreferrer">$1</a>');
+
+        // Blockquotes
+        html = html.replace(/^>\s+(.+)$/gm, '<blockquote class="md-blockquote">$1</blockquote>');
+
+        // Horizontal rules
+        html = html.replace(/^---+$/gm, '<hr class="md-hr">');
+
+        // Unordered lists
+        html = html.replace(/^(\s*)([-*+])\s+(.+)$/gm, (match, indent, bullet, content) => {
+            const level = Math.floor(indent.length / 2);
+            return `<li class="md-list-item md-ul-item" data-level="${level}">${content}</li>`;
+        });
+
+        // Ordered lists
+        html = html.replace(/^(\s*)(\d+)\.\s+(.+)$/gm, (match, indent, num, content) => {
+            const level = Math.floor(indent.length / 2);
+            return `<li class="md-list-item md-ol-item" data-level="${level}" data-number="${num}">${content}</li>`;
+        });
+
+        // Wrap consecutive list items in ul/ol tags
+        html = this.wrapListItems(html);
+
+        // Convert line breaks to paragraphs
+        html = this.convertToParagraphs(html);
+
+        return html;
+    }
+
+    wrapListItems(html) {
+        // Wrap consecutive unordered list items
+        html = html.replace(/((?:<li class="md-list-item md-ul-item"[^>]*>.*?<\/li>\s*)+)/g,
+            '<ul class="md-list md-ul">$1</ul>');
+
+        // Wrap consecutive ordered list items
+        html = html.replace(/((?:<li class="md-list-item md-ol-item"[^>]*>.*?<\/li>\s*)+)/g,
+            '<ol class="md-list md-ol">$1</ol>');
+
+        return html;
+    }
+
+    convertToParagraphs(html) {
+        // Split by double line breaks and wrap in paragraphs
+        const lines = html.split('\n');
+        let result = [];
+        let currentParagraph = [];
+
+        for (let line of lines) {
+            const trimmed = line.trim();
+
+            // Skip if it's already a block element
+            if (trimmed.match(/^<(h[1-6]|pre|blockquote|ul|ol|hr|li)/)) {
+                if (currentParagraph.length > 0) {
+                    result.push(`<p class="md-paragraph">${currentParagraph.join(' ')}</p>`);
+                    currentParagraph = [];
+                }
+                result.push(trimmed);
+            } else if (trimmed === '') {
+                if (currentParagraph.length > 0) {
+                    result.push(`<p class="md-paragraph">${currentParagraph.join(' ')}</p>`);
+                    currentParagraph = [];
+                }
+            } else {
+                currentParagraph.push(trimmed);
+            }
+        }
+
+        if (currentParagraph.length > 0) {
+            result.push(`<p class="md-paragraph">${currentParagraph.join(' ')}</p>`);
+        }
+
+        return result.join('\n');
+    }
+
+    escapeHtml(text) {
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+    }
+
+    async copyMessage(content) {
+        try {
+            await navigator.clipboard.writeText(content);
+
+            // Show temporary feedback
+            const notification = document.createElement('div');
+            notification.className = 'copy-notification';
+            notification.textContent = 'Copied to clipboard!';
+            notification.style.cssText = `
+                position: fixed;
+                top: 20px;
+                right: 20px;
+                background: #10b981;
+                color: white;
+                padding: 8px 16px;
+                border-radius: 6px;
+                font-size: 14px;
+                z-index: 1000;
+                animation: slideIn 0.3s ease-out;
+            `;
+
+            document.body.appendChild(notification);
+
+            setTimeout(() => {
+                notification.style.animation = 'slideOut 0.3s ease-out';
+                setTimeout(() => {
+                    if (notification.parentNode) {
+                        notification.parentNode.removeChild(notification);
+                    }
+                }, 300);
+            }, 2000);
+
+        } catch (error) {
+            console.error('Failed to copy to clipboard:', error);
+
+            // Fallback for older browsers
+            const textArea = document.createElement('textarea');
+            textArea.value = content;
+            document.body.appendChild(textArea);
+            textArea.select();
+            document.execCommand('copy');
+            document.body.removeChild(textArea);
+        }
+    }
+
     formatTime(date) {
         return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     }
