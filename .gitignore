@@ -367,6 +367,6 @@ local/
 
 # Documentation
 *.markdown
-*.md
+# *.md
 
 *key.json
