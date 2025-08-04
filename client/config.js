@@ -23,13 +23,9 @@ class ClientConfig {
         // Try to load from environment variables (if available in Electron)
         const config = { ...this.defaults };
 
-        // In Electron, we can access environment variables through process.env
-        if (typeof process !== 'undefined' && process.env) {
-            config.apiHost = process.env.API_HOST || config.apiHost;
-            config.apiPort = parseInt(process.env.API_PORT) || config.apiPort;
-            config.apiVersion = process.env.API_VERSION || config.apiVersion;
-            config.requestTimeout = parseInt(process.env.REQUEST_TIMEOUT) || config.requestTimeout;
-        }
+        // With context isolation enabled, we don't access process.env directly
+        // Configuration is handled through defaults and localStorage
+        // Environment-specific config can be set through the main process if needed
 
         // Try to load from localStorage (user preferences)
         if (typeof localStorage !== 'undefined') {

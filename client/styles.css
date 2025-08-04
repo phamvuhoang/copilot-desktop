@@ -171,7 +171,7 @@ kbd {
 .message-timestamp {
     font-size: 11px;
     color: #a0aec0;
-    margin-top: 4px;
+    margin: 0; /* Remove margin since it's now in header */
 }
 
 /* Input Area */
@@ -266,6 +266,11 @@ kbd {
     gap: 6px;
 }
 
+.status-indicator.processing {
+    font-weight: 500;
+    color: #f59e0b;
+}
+
 .status-indicator.processing::before {
     content: '';
     width: 8px;
@@ -273,6 +278,20 @@ kbd {
     border-radius: 50%;
     background: #f59e0b;
     animation: pulse 1.5s infinite;
+}
+
+.status-indicator.recording {
+    font-weight: 500;
+    color: #ef4444;
+}
+
+.status-indicator.recording::before {
+    content: '';
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: #ef4444;
+    animation: pulse 1s infinite;
 }
 
 .status-indicator.ready::before {
@@ -291,7 +310,7 @@ kbd {
     background: #ef4444;
 }
 
-/* Loading Overlay */
+/* Loading Overlay - Disabled in favor of unified status indicator */
 .loading-overlay {
     position: absolute;
     top: 0;
@@ -299,7 +318,7 @@ kbd {
     right: 0;
     bottom: 0;
     background: rgba(255, 255, 255, 0.9);
-    display: flex;
+    display: none; /* Always hidden - using unified status indicator instead */
     flex-direction: column;
     align-items: center;
     justify-content: center;
@@ -309,6 +328,257 @@ kbd {
 
 .loading-overlay.hidden {
     display: none;
+}
+
+/* Message Header with Copy Button */
+.message-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: 4px;
+}
+
+.copy-btn {
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 4px;
+    border-radius: 4px;
+    font-size: 12px;
+    opacity: 0.6;
+    transition: all 0.2s ease;
+}
+
+.copy-btn:hover {
+    opacity: 1;
+    background: rgba(0, 0, 0, 0.1);
+}
+
+.message-user .copy-btn:hover {
+    background: rgba(255, 255, 255, 0.2);
+}
+
+/* JSON Formatting */
+.json-content {
+    font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+}
+
+.json-formatted {
+    background: #f8f9fa;
+    border: 1px solid #e9ecef;
+    border-radius: 6px;
+    padding: 12px;
+    margin: 0;
+    overflow-x: auto;
+    font-size: 13px;
+    line-height: 1.4;
+}
+
+.message-assistant .json-formatted {
+    background: #f1f5f9;
+    border-color: #cbd5e1;
+}
+
+.json-formatted code {
+    background: none;
+    padding: 0;
+    border: none;
+    font-family: inherit;
+    color: #1f2937;
+}
+
+/* Markdown Formatting */
+.markdown-content {
+    line-height: 1.6;
+}
+
+.markdown-content .md-paragraph {
+    margin: 0 0 12px 0;
+}
+
+.markdown-content .md-paragraph:last-child {
+    margin-bottom: 0;
+}
+
+/* Markdown Headers */
+.md-header {
+    margin: 16px 0 8px 0;
+    font-weight: 600;
+    line-height: 1.3;
+}
+
+.md-h1 {
+    font-size: 1.5em;
+    color: #1f2937;
+    border-bottom: 2px solid #e5e7eb;
+    padding-bottom: 4px;
+}
+
+.md-h2 {
+    font-size: 1.3em;
+    color: #374151;
+}
+
+.md-h3 {
+    font-size: 1.1em;
+    color: #4b5563;
+}
+
+.md-h4, .md-h5, .md-h6 {
+    font-size: 1em;
+    color: #6b7280;
+}
+
+/* Markdown Text Formatting */
+.md-bold {
+    font-weight: 600;
+    color: #1f2937;
+}
+
+.md-italic {
+    font-style: italic;
+    color: #374151;
+}
+
+.md-strikethrough {
+    text-decoration: line-through;
+    color: #6b7280;
+}
+
+/* Markdown Code */
+.md-inline-code {
+    background: #f3f4f6;
+    color: #dc2626;
+    padding: 2px 4px;
+    border-radius: 3px;
+    font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+    font-size: 0.9em;
+}
+
+.md-code-block {
+    background: #f8f9fa;
+    border: 1px solid #e9ecef;
+    border-radius: 6px;
+    padding: 12px;
+    margin: 8px 0;
+    overflow-x: auto;
+    font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+    font-size: 13px;
+    line-height: 1.4;
+}
+
+.message-assistant .md-code-block {
+    background: #f1f5f9;
+    border-color: #cbd5e1;
+}
+
+.md-code-block code {
+    background: none;
+    padding: 0;
+    border: none;
+    font-family: inherit;
+    color: #1f2937;
+}
+
+/* Markdown Lists */
+.md-list {
+    margin: 8px 0;
+    padding-left: 0;
+}
+
+.md-ul {
+    list-style: none;
+}
+
+.md-ol {
+    list-style: none;
+    counter-reset: md-counter;
+}
+
+.md-list-item {
+    margin: 4px 0;
+    padding-left: 20px;
+    position: relative;
+}
+
+.md-ul-item::before {
+    content: '•';
+    position: absolute;
+    left: 8px;
+    color: #6b7280;
+    font-weight: bold;
+}
+
+.md-ol-item {
+    counter-increment: md-counter;
+}
+
+.md-ol-item::before {
+    content: counter(md-counter) '.';
+    position: absolute;
+    left: 0;
+    color: #6b7280;
+    font-weight: 500;
+    min-width: 16px;
+}
+
+/* Markdown Links */
+.md-link {
+    color: #3b82f6;
+    text-decoration: none;
+    border-bottom: 1px solid transparent;
+    transition: all 0.2s ease;
+}
+
+.md-link:hover {
+    color: #1d4ed8;
+    border-bottom-color: #3b82f6;
+}
+
+/* Markdown Blockquotes */
+.md-blockquote {
+    border-left: 4px solid #d1d5db;
+    padding: 8px 16px;
+    margin: 8px 0;
+    background: #f9fafb;
+    color: #4b5563;
+    font-style: italic;
+}
+
+.message-assistant .md-blockquote {
+    background: #f1f5f9;
+    border-left-color: #cbd5e1;
+}
+
+/* Markdown Horizontal Rules */
+.md-hr {
+    border: none;
+    height: 1px;
+    background: #e5e7eb;
+    margin: 16px 0;
+}
+
+/* Copy Notification Animation */
+@keyframes slideIn {
+    from {
+        transform: translateX(100%);
+        opacity: 0;
+    }
+    to {
+        transform: translateX(0);
+        opacity: 1;
+    }
+}
+
+@keyframes slideOut {
+    from {
+        transform: translateX(0);
+        opacity: 1;
+    }
+    to {
+        transform: translateX(100%);
+        opacity: 0;
+    }
 }
 
 .loading-spinner {
@@ -337,21 +607,134 @@ kbd {
     50% { opacity: 0.5; }
 }
 
+/* Screenshot Preview */
+.screenshot-preview {
+    background: rgba(255, 255, 255, 0.95);
+    border-top: 1px solid rgba(0, 0, 0, 0.1);
+    padding: 16px;
+    max-height: 300px;
+    overflow-y: auto;
+    animation: slideUp 0.3s ease;
+}
+
+.screenshot-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 12px;
+}
+
+.screenshot-title {
+    font-weight: 600;
+    color: #4a5568;
+    font-size: 14px;
+}
+
+.screenshot-close {
+    background: none;
+    border: none;
+    font-size: 20px;
+    color: #6b7280;
+    cursor: pointer;
+    padding: 4px;
+    border-radius: 4px;
+    transition: all 0.2s ease;
+}
+
+.screenshot-close:hover {
+    background: rgba(0, 0, 0, 0.05);
+    color: #374151;
+}
+
+.screenshot-content {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.screenshot-image {
+    max-width: 100%;
+    max-height: 200px;
+    object-fit: contain;
+    border-radius: 8px;
+    border: 1px solid #e2e8f0;
+    background: #f7fafc;
+}
+
+.screenshot-controls {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+}
+
+.screenshot-query {
+    flex: 1;
+    padding: 8px 12px;
+    border: 1px solid #e2e8f0;
+    border-radius: 6px;
+    font-size: 14px;
+    outline: none;
+    transition: border-color 0.2s ease;
+}
+
+.screenshot-query:focus {
+    border-color: #667eea;
+}
+
+.analyze-btn {
+    background: #667eea;
+    color: white;
+    border: none;
+    padding: 8px 16px;
+    border-radius: 6px;
+    font-size: 14px;
+    cursor: pointer;
+    transition: background-color 0.2s ease;
+}
+
+.analyze-btn:hover {
+    background: #5a67d8;
+}
+
+.analyze-btn:disabled {
+    background: #a0aec0;
+    cursor: not-allowed;
+}
+
+/* Voice Recording Styles */
+.voice-btn.recording {
+    animation: recordingPulse 1.5s infinite;
+}
+
+@keyframes recordingPulse {
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(1.1); }
+}
+
+@keyframes slideUp {
+    from { transform: translateY(20px); opacity: 0; }
+    to { transform: translateY(0); opacity: 1; }
+}
+
 /* Scrollbar */
-.chat-history::-webkit-scrollbar {
+.chat-history::-webkit-scrollbar,
+.screenshot-preview::-webkit-scrollbar {
     width: 6px;
 }
 
-.chat-history::-webkit-scrollbar-track {
+.chat-history::-webkit-scrollbar-track,
+.screenshot-preview::-webkit-scrollbar-track {
     background: transparent;
 }
 
-.chat-history::-webkit-scrollbar-thumb {
+.chat-history::-webkit-scrollbar-thumb,
+.screenshot-preview::-webkit-scrollbar-thumb {
     background: rgba(0, 0, 0, 0.2);
     border-radius: 3px;
 }
 
-.chat-history::-webkit-scrollbar-thumb:hover {
+.chat-history::-webkit-scrollbar-thumb:hover,
+.screenshot-preview::-webkit-scrollbar-thumb:hover {
     background: rgba(0, 0, 0, 0.3);
 }
 

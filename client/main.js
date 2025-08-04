@@ -1,4 +1,4 @@
-const { app, BrowserWindow, Tray, Menu, globalShortcut, ipcMain, dialog } = require('electron');
+const { app, BrowserWindow, Tray, Menu, globalShortcut, ipcMain, dialog, desktopCapturer } = require('electron');
 const path = require('path');
 const AutoLaunch = require('auto-launch');
 
@@ -59,9 +59,12 @@ class AICopilotApp {
       resizable: true,
       skipTaskbar: false, // Ensure app appears in taskbar/dock
       webPreferences: {
-        nodeIntegration: true,
-        contextIsolation: false,
-        enableRemoteModule: true
+        nodeIntegration: false,
+        contextIsolation: true,
+        enableRemoteModule: false,
+        allowRunningInsecureContent: false,
+        experimentalFeatures: false,
+        preload: path.join(__dirname, 'preload.js')
       },
       icon: this.getIconPath() // Re-enable icon
     });
@@ -164,6 +167,68 @@ class AICopilotApp {
 
     ipcMain.handle('show-window', () => {
       this.showWindow();
+    });
+
+    // Screenshot functionality
+    ipcMain.handle('get-screen-sources', async () => {
+      try {
+        // Check for screen recording permission on macOS
+        if (process.platform === 'darwin') {
+          const { systemPreferences, shell } = require('electron');
+
+          // Check if we have screen recording permission
+          const hasPermission = systemPreferences.getMediaAccessStatus('screen');
+
+          if (hasPermission !== 'granted') {
+            // Show dialog with instructions
+            const { dialog } = require('electron');
+            // Determine if we're in development mode
+            const isDev = process.env.NODE_ENV === 'development' || process.defaultApp;
+            const appName = isDev ? 'Electron' : 'AI Copilot Desktop';
+
+            const result = await dialog.showMessageBox(this.mainWindow, {
+              type: 'info',
+              title: 'Screen Recording Permission Required',
+              message: 'AI Copilot needs screen recording permission to capture screenshots.',
+              detail: `Click "Open Settings" to grant permission, then restart the app.\n\nIn System Preferences:\n1. Go to Security & Privacy > Privacy > Screen Recording\n2. Look for "${appName}" in the list\n3. Check the box to enable permission\n4. Restart the application\n\nNote: In development mode, you need to grant permission to "Electron".`,
+              buttons: ['Open Settings', 'Cancel'],
+              defaultId: 0
+            });
+
+            if (result.response === 0) {
+              // Open System Preferences to Screen Recording section
+              shell.openExternal('x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture');
+            }
+
+            throw new Error('Screen recording permission required. Please grant permission in System Preferences and restart the app.');
+          }
+        }
+
+        const sources = await desktopCapturer.getSources({
+          types: ['screen'],
+          thumbnailSize: { width: 150, height: 150 }
+        });
+        return sources;
+      } catch (error) {
+        console.error('Error getting screen sources:', error);
+        throw error;
+      }
+    });
+
+    // Check screen recording permission status
+    ipcMain.handle('check-screen-permission', async () => {
+      try {
+        if (process.platform === 'darwin') {
+          const { systemPreferences } = require('electron');
+          const status = systemPreferences.getMediaAccessStatus('screen');
+          return { hasPermission: status === 'granted', status };
+        }
+        // On other platforms, assume permission is available
+        return { hasPermission: true, status: 'granted' };
+      } catch (error) {
+        console.error('Error checking screen permission:', error);
+        return { hasPermission: false, status: 'unknown' };
+      }
     });
   }
 

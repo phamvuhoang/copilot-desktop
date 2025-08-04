@@ -17,6 +17,7 @@ load_dotenv()
 from routes.chat import router as chat_router
 from routes.voice import router as voice_router
 from routes.screenshot import router as screenshot_router
+from routes.process import router as process_router
 
 # Create FastAPI application
 app = FastAPI(
@@ -40,6 +41,7 @@ app.add_middleware(
 app.include_router(chat_router, prefix="/api/v1", tags=["chat"])
 app.include_router(voice_router, prefix="/api/v1", tags=["voice"])
 app.include_router(screenshot_router, prefix="/api/v1", tags=["screenshot"])
+app.include_router(process_router, prefix="/api/v1", tags=["process"])
 
 @app.get("/")
 async def root():
@@ -52,6 +54,7 @@ async def root():
             "chat": "/api/v1/chat",
             "voice": "/api/v1/voice",
             "screenshot": "/api/v1/screenshot",
+            "process": "/api/v1/process",
             "docs": "/docs"
         }
     }
