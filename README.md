@@ -39,7 +39,7 @@ AI Copilot for Desktops is a cross-platform desktop AI assistant powered by Elec
 1.  **Clone the repository:**
 
     ```bash
-    git clone https://github.com/aicopilot/desktop.git
+    git clone https://github.com/phamvuhoang/copilot-desktop.git
     cd copilot-desktop
     ```
 
