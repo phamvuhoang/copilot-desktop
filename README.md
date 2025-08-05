@@ -82,7 +82,7 @@ To use the Google Cloud services (Speech-to-Text, Text-to-Speech, and Vision), y
 8.  **Click on the newly created service account.**
 9.  **Go to the "Keys" tab and click "Add Key" > "Create new key".**
 10. **Select "JSON" as the key type and click "Create".** A JSON file will be downloaded to your computer.
-11. **Rename the downloaded JSON file to `service-account-key.json`** and place it in the `server/config` and update `server/config/settings.py` if necessary.
+11. **Rename the downloaded JSON file to `service-account-key.json`** and place it in the `server` and update `server/config/settings.py` if necessary.
 
 ### Enabling APIs
 
