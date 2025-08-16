@@ -1,4 +1,4 @@
-const { app, BrowserWindow, Tray, Menu, globalShortcut, ipcMain, dialog, desktopCapturer } = require('electron');
+const { app, BrowserWindow, Tray, Menu, globalShortcut, ipcMain, dialog, desktopCapturer, shell } = require('electron');
 const path = require('path');
 const AutoLaunch = require('auto-launch');
 
@@ -230,6 +230,35 @@ class AICopilotApp {
         return { hasPermission: false, status: 'unknown' };
       }
     });
+
+    // Application opening functionality
+    ipcMain.handle('open-application', async (event, applicationName) => {
+      try {
+        console.log(`Attempting to open application: ${applicationName}`);
+
+        // Normalize application name
+        const appName = applicationName.toLowerCase().trim();
+
+        // Platform-specific application opening
+        if (process.platform === 'darwin') {
+          // macOS - use 'open' command
+          return await this.openApplicationMacOS(appName);
+        } else if (process.platform === 'win32') {
+          // Windows - use shell.openPath or start command
+          return await this.openApplicationWindows(appName);
+        } else {
+          // Linux - use various methods
+          return await this.openApplicationLinux(appName);
+        }
+      } catch (error) {
+        console.error('Error opening application:', error);
+        return {
+          success: false,
+          error: error.message,
+          message: `Failed to open ${applicationName}: ${error.message}`
+        };
+      }
+    });
   }
 
   showWindow() {
@@ -357,6 +386,151 @@ class AICopilotApp {
     }
 
     return iconPath;
+  }
+
+  // Platform-specific application opening methods
+  async openApplicationMacOS(appName) {
+    const { exec } = require('child_process');
+    const { promisify } = require('util');
+    const execAsync = promisify(exec);
+
+    // Common macOS applications mapping
+    const macApps = {
+      'chrome': 'Google Chrome',
+      'firefox': 'Firefox',
+      'safari': 'Safari',
+      'notion': 'Notion',
+      'vscode': 'Visual Studio Code',
+      'code': 'Visual Studio Code',
+      'terminal': 'Terminal',
+      'finder': 'Finder',
+      'mail': 'Mail',
+      'calendar': 'Calendar',
+      'notes': 'Notes',
+      'calculator': 'Calculator',
+      'textedit': 'TextEdit',
+      'preview': 'Preview',
+      'spotify': 'Spotify',
+      'slack': 'Slack',
+      'discord': 'Discord',
+      'zoom': 'zoom.us',
+      'teams': 'Microsoft Teams'
+    };
+
+    const actualAppName = macApps[appName] || appName;
+
+    try {
+      // Try to open the application
+      await execAsync(`open -a "${actualAppName}"`);
+      return {
+        success: true,
+        message: `Successfully opened ${actualAppName}`,
+        application: actualAppName
+      };
+    } catch (error) {
+      // If direct open fails, try with bundle identifier or alternative methods
+      console.log(`Direct open failed for ${actualAppName}, trying alternatives...`);
+
+      try {
+        // Try opening by searching in Applications folder
+        await execAsync(`open "/Applications/${actualAppName}.app"`);
+        return {
+          success: true,
+          message: `Successfully opened ${actualAppName}`,
+          application: actualAppName
+        };
+      } catch (secondError) {
+        throw new Error(`Could not find or open application "${actualAppName}"`);
+      }
+    }
+  }
+
+  async openApplicationWindows(appName) {
+    const { exec } = require('child_process');
+    const { promisify } = require('util');
+    const execAsync = promisify(exec);
+
+    // Common Windows applications mapping
+    const winApps = {
+      'chrome': 'chrome',
+      'firefox': 'firefox',
+      'edge': 'msedge',
+      'notepad': 'notepad',
+      'calculator': 'calc',
+      'paint': 'mspaint',
+      'explorer': 'explorer',
+      'cmd': 'cmd',
+      'powershell': 'powershell',
+      'vscode': 'code',
+      'code': 'code',
+      'notion': 'notion',
+      'spotify': 'spotify',
+      'slack': 'slack',
+      'discord': 'discord',
+      'zoom': 'zoom',
+      'teams': 'teams'
+    };
+
+    const actualAppName = winApps[appName] || appName;
+
+    try {
+      // Try to start the application
+      await execAsync(`start "" "${actualAppName}"`);
+      return {
+        success: true,
+        message: `Successfully opened ${actualAppName}`,
+        application: actualAppName
+      };
+    } catch (error) {
+      throw new Error(`Could not find or open application "${actualAppName}"`);
+    }
+  }
+
+  async openApplicationLinux(appName) {
+    const { exec } = require('child_process');
+    const { promisify } = require('util');
+    const execAsync = promisify(exec);
+
+    // Common Linux applications mapping
+    const linuxApps = {
+      'chrome': 'google-chrome',
+      'firefox': 'firefox',
+      'terminal': 'gnome-terminal',
+      'files': 'nautilus',
+      'calculator': 'gnome-calculator',
+      'text': 'gedit',
+      'vscode': 'code',
+      'code': 'code',
+      'notion': 'notion-app',
+      'spotify': 'spotify',
+      'slack': 'slack',
+      'discord': 'discord',
+      'zoom': 'zoom'
+    };
+
+    const actualAppName = linuxApps[appName] || appName;
+
+    try {
+      // Try to open the application
+      await execAsync(`${actualAppName} &`);
+      return {
+        success: true,
+        message: `Successfully opened ${actualAppName}`,
+        application: actualAppName
+      };
+    } catch (error) {
+      // Try alternative methods
+      try {
+        await execAsync(`which ${actualAppName} && ${actualAppName} &`);
+        return {
+          success: true,
+          message: `Successfully opened ${actualAppName}`,
+          application: actualAppName
+        };
+      } catch (secondError) {
+        throw new Error(`Could not find or open application "${actualAppName}"`);
+      }
+    }
   }
 }
 

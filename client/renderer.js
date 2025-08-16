@@ -290,11 +290,107 @@ class AICopilotRenderer {
         }
     }
 
-    // Handle application opening (placeholder for future implementation)
+    // Handle application opening
     async handleOpenApplication(query) {
-        // For now, just acknowledge the request
-        this.addMessage(`I understand you want to open an application, but this feature is not yet implemented. You asked: "${query}"`, 'assistant');
-        this.setStatus('ready', 'Application opening not yet supported');
+        try {
+            // Extract application name from the query
+            const applicationName = this.extractApplicationName(query);
+
+            if (!applicationName) {
+                this.addMessage(`I couldn't identify which application you want to open from: "${query}". Please try being more specific, like "Open Chrome" or "Launch Notion".`, 'assistant');
+                this.setStatus('ready', 'Could not identify application');
+                return;
+            }
+
+            this.setStatus('processing', `Opening ${applicationName}...`);
+
+            // Call the Electron API to open the application
+            const result = await window.electronAPI.openApplication(applicationName);
+
+            if (result.success) {
+                this.addMessage(`Successfully opened ${result.application}! 🚀`, 'assistant');
+                this.setStatus('ready', `Opened ${result.application}`);
+            } else {
+                this.addMessage(`Sorry, I couldn't open "${applicationName}". ${result.message || 'The application might not be installed or accessible.'}`, 'assistant');
+                this.setStatus('ready', 'Failed to open application');
+            }
+
+        } catch (error) {
+            console.error('Error opening application:', error);
+            this.addMessage(`Sorry, I encountered an error while trying to open the application: ${error.message}`, 'assistant');
+            this.setStatus('ready', 'Application opening failed');
+        }
+    }
+
+    // Extract application name from user query
+    extractApplicationName(query) {
+        const text = query.toLowerCase().trim();
+
+        // Common application names and their variations
+        const appMappings = {
+            // Browsers
+            'chrome': ['chrome', 'google chrome'],
+            'firefox': ['firefox', 'mozilla firefox'],
+            'safari': ['safari'],
+            'edge': ['edge', 'microsoft edge'],
+
+            // Development
+            'vscode': ['vscode', 'vs code', 'visual studio code', 'code'],
+            'terminal': ['terminal', 'command line', 'cmd', 'powershell'],
+
+            // Productivity
+            'notion': ['notion'],
+            'slack': ['slack'],
+            'discord': ['discord'],
+            'zoom': ['zoom'],
+            'teams': ['teams', 'microsoft teams'],
+            'spotify': ['spotify'],
+
+            // System apps
+            'calculator': ['calculator', 'calc'],
+            'notepad': ['notepad', 'text editor'],
+            'finder': ['finder', 'files', 'file manager'],
+            'mail': ['mail', 'email'],
+            'calendar': ['calendar'],
+            'notes': ['notes']
+        };
+
+        // Look for trigger words followed by app names
+        const triggerWords = ['open', 'launch', 'start', 'run', 'execute'];
+        const words = text.split(/\s+/);
+
+        // Find trigger word and extract following words
+        for (let i = 0; i < words.length; i++) {
+            if (triggerWords.includes(words[i])) {
+                // Get the rest of the words after the trigger
+                const appPart = words.slice(i + 1).join(' ');
+
+                // Check against known applications
+                for (const [appKey, variations] of Object.entries(appMappings)) {
+                    for (const variation of variations) {
+                        if (appPart.includes(variation)) {
+                            return appKey;
+                        }
+                    }
+                }
+
+                // If no exact match, return the first word after trigger
+                if (words[i + 1]) {
+                    return words[i + 1];
+                }
+            }
+        }
+
+        // Fallback: check if any app name is mentioned anywhere in the text
+        for (const [appKey, variations] of Object.entries(appMappings)) {
+            for (const variation of variations) {
+                if (text.includes(variation)) {
+                    return appKey;
+                }
+            }
+        }
+
+        return null;
     }
 
     async sendToAPI(message) {
