@@ -8,8 +8,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
   toggleWindow: () => ipcRenderer.invoke('toggle-window'),
   hideWindow: () => ipcRenderer.invoke('hide-window'),
   showWindow: () => ipcRenderer.invoke('show-window'),
-  
+
   // Screenshot functionality
   getScreenSources: () => ipcRenderer.invoke('get-screen-sources'),
   checkScreenPermission: () => ipcRenderer.invoke('check-screen-permission'),
+
+  // Application opening functionality
+  openApplication: (applicationName) => ipcRenderer.invoke('open-application', applicationName),
 });
