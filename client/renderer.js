@@ -24,6 +24,13 @@ class AICopilotRenderer {
         // Message watching
         this.isWatchingMessages = false;
         this.messageWatcherInterval = null;
+        this.seenMessages = new Set(); // Track seen messages to avoid duplicates
+        this.messageCheckInterval = 10000; // 10 seconds default
+        this.detectedMessages = []; // Store all detected messages
+        this.monitoredApps = ['chrome', 'slack']; // Default apps to monitor
+
+        // Load settings from localStorage
+        this.loadMessagingSettings();
 
         this.init();
     }
@@ -91,6 +98,7 @@ class AICopilotRenderer {
         document.getElementById('voiceBtn').addEventListener('click', () => this.handleVoiceInput());
         document.getElementById('screenshotBtn').addEventListener('click', () => this.handleScreenshot());
         document.getElementById('watchMessagesBtn').addEventListener('click', () => this.toggleMessageWatcher());
+        document.getElementById('messagingSettingsBtn').addEventListener('click', () => this.openMessagingSettings());
 
         // Screenshot preview controls
         document.getElementById('screenshotClose').addEventListener('click', () => this.closeScreenshotPreview());
@@ -1275,47 +1283,110 @@ class AICopilotRenderer {
 
     startMessageWatcher() {
         this.isWatchingMessages = true;
-        this.addMessage('Started watching for new messages.', 'system');
+        this.seenMessages.clear(); // Clear seen messages when starting
+        this.detectedMessages = []; // Clear detected messages
+
+        const intervalSeconds = this.messageCheckInterval / 1000;
+        const appsText = this.monitoredApps.join(', ');
+        this.addMessage(
+            `Started watching for new messages from: ${appsText}. Checking every ${intervalSeconds} seconds.`,
+            'system'
+        );
         this.updateUI();
         this.checkForNewMessages(); // Check immediately
-        this.messageWatcherInterval = setInterval(() => this.checkForNewMessages(), 10000); // Check every 10 seconds
+        this.messageWatcherInterval = setInterval(() => this.checkForNewMessages(), this.messageCheckInterval);
     }
 
     stopMessageWatcher() {
         this.isWatchingMessages = false;
         this.addMessage('Stopped watching for new messages.', 'system');
         this.updateUI();
-        clearInterval(this.messageWatcherInterval);
+        if (this.messageWatcherInterval) {
+            clearInterval(this.messageWatcherInterval);
+            this.messageWatcherInterval = null;
+        }
+        this.closeMessagesPanel();
     }
 
     async checkForNewMessages() {
+        if (!this.isWatchingMessages) return; // Safety check
+
         try {
+            // Get active window title for better app detection
+            let activeWindowInfo = null;
+            try {
+                console.log('Attempting to get active window title...');
+                activeWindowInfo = await window.electronAPI.getActiveWindowTitle();
+                console.log('Active window info received:', activeWindowInfo);
+
+                if (activeWindowInfo && activeWindowInfo.success) {
+                    console.log(`Active app: ${activeWindowInfo.appName}, Window: ${activeWindowInfo.windowTitle}`);
+                } else {
+                    console.warn('Failed to get active window info:', activeWindowInfo);
+                }
+            } catch (error) {
+                console.error('Error getting active window title:', error);
+            }
+
             const base64Image = await this.captureScreenForAnalysis();
-            if (!base64Image) return;
+            if (!base64Image) {
+                console.warn('Could not capture screen for message checking');
+                return;
+            }
+
+            const requestBody = {
+                image_data: base64Image,
+                monitored_apps: this.monitoredApps,
+                active_window: activeWindowInfo?.success ? activeWindowInfo : null
+            };
+
+            console.log('Sending request with active_window:', requestBody.active_window ?
+                `${requestBody.active_window.appName} | ${requestBody.active_window.windowTitle}` :
+                'null');
 
             const response = await fetch(`${this.apiBaseUrl}/messaging/check-new`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ image_data: base64Image }),
+                body: JSON.stringify(requestBody),
             });
 
             if (!response.ok) {
-                console.error('Failed to check for new messages.');
+                console.error(`Failed to check for new messages: ${response.status} ${response.statusText}`);
                 return;
             }
 
             const data = await response.json();
             if (data.messages && data.messages.length > 0) {
+                let newMessageCount = 0;
                 data.messages.forEach(msg => {
-                    const messageId = `msg_${Date.now()}`;
-                    this.addMessage(`New message from ${msg.sender}: "${msg.snippet}"`, 'assistant', false, messageId, null, [
-                        { label: 'Reply', onClick: () => this.handleReply(msg, messageId) },
-                        { label: 'Dismiss', onClick: () => this.deleteMessage(messageId) }
-                    ]);
+                    // Create unique identifier for deduplication
+                    const messageKey = `${msg.sender}:${msg.snippet}`;
+
+                    if (!this.seenMessages.has(messageKey)) {
+                        this.seenMessages.add(messageKey);
+                        newMessageCount++;
+
+                        // Add to detected messages array
+                        const messageData = {
+                            id: `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+                            sender: msg.sender,
+                            snippet: msg.snippet,
+                            app: msg.app || 'unknown',
+                            timestamp: new Date()
+                        };
+                        this.detectedMessages.unshift(messageData); // Add to beginning
+                    }
                 });
+
+                if (newMessageCount > 0) {
+                    console.log(`Detected ${newMessageCount} new message(s)`);
+                    this.updateMessagesPanel();
+                    this.showMessagesPanel();
+                }
             }
         } catch (error) {
             console.error('Error checking for new messages:', error);
+            // Don't show error to user for background checks, just log it
         }
     }
 
@@ -1324,6 +1395,7 @@ class AICopilotRenderer {
             const requestBody = {
                 input_type: 'text',
                 text: prompt,
+                system_prompt: 'You are a helpful assistant that writes message replies. Provide only the reply text, nothing else. Do not include greetings like "Here is a reply:" or explanations.',
                 conversation_history: this.messageHistory
                     .filter(msg => msg.sender !== 'system')
                     .slice(-10)
@@ -1346,48 +1418,67 @@ class AICopilotRenderer {
             }
 
             const data = await response.json();
+            console.log('Draft reply response data:', data);
+
             if (data.response) {
                 return data.response;
             }
+
+            // Log the full response to help debug
+            console.error('No response field in data:', JSON.stringify(data, null, 2));
             throw new Error("No response in draft reply from server.");
 
         } catch (error) {
             console.error('Error getting draft reply:', error);
+            console.error('Error details:', error.message);
             return "Sorry, I couldn't generate a draft.";
         }
     }
 
     async handleReply(message, messageId) {
         this.deleteMessage(messageId);
-        this.addMessage(`Preparing to reply to ${message.sender}...`, 'system');
+        this.addMessage(`Generating draft reply to ${message.sender}...`, 'system');
 
         try {
-            const base64Image = await this.captureScreenForAnalysis();
-            if (!base64Image) throw new Error("Could not capture screen.");
+            // Generate draft reply using AI
+            // Use a prompt that won't trigger action detection
+            const draft = await this.getDraftReply(
+                `I received this message from ${message.sender}: "${message.snippet}"\n\nPlease write a short, friendly reply for me.`
+            );
 
-            const response = await fetch(`${this.apiBaseUrl}/messaging/find-reply-button`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ image_data: base64Image }),
-            });
+            if (!draft || draft.includes("couldn't generate")) {
+                throw new Error('Failed to generate draft reply');
+            }
 
-            if (!response.ok) throw new Error('Could not find reply button.');
+            // Copy draft to clipboard
+            const result = await window.electronAPI.copyToClipboard(draft);
 
-            const data = await response.json();
-            const { location } = data;
-            const x = (location[0].x + location[1].x) / 2;
-            const y = (location[0].y + location[2].y) / 2;
-
-            await window.electronAPI.robotClick(x, y);
-
-            const draft = await this.getDraftReply(`Generate a short, friendly reply to this message from ${message.sender}: "${message.snippet}"`);
-
-            await window.electronAPI.robotType(draft);
-            this.addMessage(`Drafted and typed reply: "${draft}"`, 'system');
+            if (result.success) {
+                this.addMessage(
+                    `✅ Draft reply copied to clipboard:\n\n"${draft}"\n\n` +
+                    `You can now paste it (Cmd+V / Ctrl+V) into your messaging app.`,
+                    'assistant',
+                    false,
+                    null,
+                    null,
+                    [
+                        {
+                            label: 'Copy Again',
+                            onClick: () => window.electronAPI.copyToClipboard(draft)
+                        }
+                    ]
+                );
+            } else {
+                throw new Error('Failed to copy to clipboard');
+            }
 
         } catch (error) {
             console.error('Error handling reply:', error);
-            this.addMessage(`Failed to handle reply: ${error.message}`, 'system', true);
+            this.addMessage(
+                `❌ Failed to generate reply: ${error.message}. Please try again.`,
+                'assistant',
+                true
+            );
         }
     }
 
@@ -1402,7 +1493,187 @@ class AICopilotRenderer {
             return null;
         }
     }
+
+    // Settings Management
+    loadMessagingSettings() {
+        try {
+            const settings = localStorage.getItem('messagingSettings');
+            if (settings) {
+                const parsed = JSON.parse(settings);
+                this.messageCheckInterval = parsed.checkInterval || 10000;
+                this.monitoredApps = parsed.monitoredApps || ['chrome', 'slack'];
+            }
+        } catch (error) {
+            console.error('Error loading messaging settings:', error);
+        }
+    }
+
+    saveMessagingSettings() {
+        try {
+            const settings = {
+                checkInterval: this.messageCheckInterval,
+                monitoredApps: this.monitoredApps
+            };
+            localStorage.setItem('messagingSettings', JSON.stringify(settings));
+        } catch (error) {
+            console.error('Error saving messaging settings:', error);
+        }
+    }
+
+    openMessagingSettings() {
+        const modal = document.getElementById('messagingSettingsModal');
+        const intervalInput = document.getElementById('checkInterval');
+        const checkboxes = document.querySelectorAll('.app-checkbox');
+
+        // Set current values
+        intervalInput.value = this.messageCheckInterval / 1000;
+        checkboxes.forEach(checkbox => {
+            checkbox.checked = this.monitoredApps.includes(checkbox.value);
+        });
+
+        modal.style.display = 'flex';
+
+        // Event handlers
+        const closeBtn = document.getElementById('closeMessagingSettings');
+        const cancelBtn = document.getElementById('cancelMessagingSettings');
+        const saveBtn = document.getElementById('saveMessagingSettings');
+
+        const closeModal = () => {
+            modal.style.display = 'none';
+        };
+
+        closeBtn.onclick = closeModal;
+        cancelBtn.onclick = closeModal;
+
+        saveBtn.onclick = () => {
+            // Get interval value
+            const intervalSeconds = parseInt(intervalInput.value);
+            if (intervalSeconds >= 5 && intervalSeconds <= 300) {
+                this.messageCheckInterval = intervalSeconds * 1000;
+            }
+
+            // Get selected apps
+            this.monitoredApps = Array.from(checkboxes)
+                .filter(cb => cb.checked)
+                .map(cb => cb.value);
+
+            // Save to localStorage
+            this.saveMessagingSettings();
+
+            // Restart watcher if active
+            if (this.isWatchingMessages) {
+                this.stopMessageWatcher();
+                this.startMessageWatcher();
+            }
+
+            closeModal();
+            this.addMessage('Messaging settings updated successfully.', 'system');
+        };
+    }
+
+    // Messages Panel Management
+    showMessagesPanel() {
+        const panel = document.getElementById('messagesPanel');
+        panel.style.display = 'flex';
+
+        // Setup close button
+        const closeBtn = document.getElementById('closeMessagesPanel');
+        closeBtn.onclick = () => this.closeMessagesPanel();
+    }
+
+    closeMessagesPanel() {
+        const panel = document.getElementById('messagesPanel');
+        panel.style.display = 'none';
+    }
+
+    updateMessagesPanel() {
+        const panelBody = document.getElementById('messagesPanelBody');
+        const messageCount = document.getElementById('messageCount');
+
+        messageCount.textContent = this.detectedMessages.length;
+
+        if (this.detectedMessages.length === 0) {
+            panelBody.innerHTML = `
+                <div class="messages-empty">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+                    </svg>
+                    <p>No new messages detected</p>
+                </div>
+            `;
+            return;
+        }
+
+        panelBody.innerHTML = this.detectedMessages.map(msg => {
+            const snippetPreview = msg.snippet.length > 100
+                ? msg.snippet.substring(0, 100) + '...'
+                : msg.snippet;
+
+            return `
+                <div class="message-card" data-message-id="${msg.id}">
+                    <div class="message-card-header">
+                        <span class="message-sender">${this.escapeHtml(msg.sender)}</span>
+                        <span class="message-app">${msg.app}</span>
+                    </div>
+                    <div class="message-snippet" data-full="${this.escapeHtml(msg.snippet)}">
+                        ${this.escapeHtml(snippetPreview)}
+                    </div>
+                    ${msg.snippet.length > 100 ? '<button class="expand-btn">Show more</button>' : ''}
+                    <div class="message-actions">
+                        <button class="message-action-btn primary" onclick="renderer.handleMessageReply('${msg.id}')">
+                            Copy Draft Reply
+                        </button>
+                        <button class="message-action-btn" onclick="renderer.dismissMessage('${msg.id}')">
+                            Dismiss
+                        </button>
+                    </div>
+                </div>
+            `;
+        }).join('');
+
+        // Add expand/collapse functionality
+        panelBody.querySelectorAll('.expand-btn').forEach(btn => {
+            btn.onclick = (e) => {
+                const snippet = e.target.previousElementSibling;
+                const isExpanded = snippet.classList.contains('expanded');
+
+                if (isExpanded) {
+                    const preview = snippet.dataset.full.substring(0, 100) + '...';
+                    snippet.textContent = preview;
+                    snippet.classList.remove('expanded');
+                    e.target.textContent = 'Show more';
+                } else {
+                    snippet.textContent = snippet.dataset.full;
+                    snippet.classList.add('expanded');
+                    e.target.textContent = 'Show less';
+                }
+            };
+        });
+    }
+
+    handleMessageReply(messageId) {
+        const message = this.detectedMessages.find(m => m.id === messageId);
+        if (!message) return;
+
+        this.handleReply(message, messageId);
+    }
+
+    dismissMessage(messageId) {
+        this.detectedMessages = this.detectedMessages.filter(m => m.id !== messageId);
+        this.updateMessagesPanel();
+
+        if (this.detectedMessages.length === 0) {
+            this.closeMessagesPanel();
+        }
+    }
+
+    escapeHtml(text) {
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+    }
 }
 
-// Initialize the renderer when the script loads
-new AICopilotRenderer();
+// Initialize the renderer when the script loads and make it globally accessible
+const renderer = new AICopilotRenderer();
+window.renderer = renderer; // Make accessible for onclick handlers
