@@ -15,4 +15,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // Application opening functionality
   openApplication: (applicationName) => ipcRenderer.invoke('open-application', applicationName),
+
+  // RobotJS functionality
+  robotClick: (x, y) => ipcRenderer.invoke('robot-click', x, y),
+  robotType: (text) => ipcRenderer.invoke('robot-type', text),
 });

@@ -1,6 +1,7 @@
 const { app, BrowserWindow, Tray, Menu, globalShortcut, ipcMain, dialog, desktopCapturer, shell } = require('electron');
 const path = require('path');
 const AutoLaunch = require('auto-launch');
+const robot = require('robotjs');
 
 class AICopilotApp {
   constructor() {
@@ -257,6 +258,28 @@ class AICopilotApp {
           error: error.message,
           message: `Failed to open ${applicationName}: ${error.message}`
         };
+      }
+    });
+
+    // RobotJS functionality
+    ipcMain.handle('robot-click', async (event, x, y) => {
+      try {
+        robot.moveMouse(x, y);
+        robot.mouseClick();
+        return { success: true };
+      } catch (error) {
+        console.error('Error with robotjs click:', error);
+        return { success: false, error: error.message };
+      }
+    });
+
+    ipcMain.handle('robot-type', async (event, text) => {
+      try {
+        robot.typeString(text);
+        return { success: true };
+      } catch (error) {
+        console.error('Error with robotjs type:', error);
+        return { success: false, error: error.message };
       }
     });
   }

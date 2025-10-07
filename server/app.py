@@ -18,6 +18,7 @@ from routes.chat import router as chat_router
 from routes.voice import router as voice_router
 from routes.screenshot import router as screenshot_router
 from routes.process import router as process_router
+from routes.messaging import router as messaging_router
 
 # Create FastAPI application
 app = FastAPI(
@@ -42,6 +43,7 @@ app.include_router(chat_router, prefix="/api/v1", tags=["chat"])
 app.include_router(voice_router, prefix="/api/v1", tags=["voice"])
 app.include_router(screenshot_router, prefix="/api/v1", tags=["screenshot"])
 app.include_router(process_router, prefix="/api/v1", tags=["process"])
+app.include_router(messaging_router, prefix="/api/v1", tags=["messaging"])
 
 @app.get("/")
 async def root():
@@ -55,6 +57,7 @@ async def root():
             "voice": "/api/v1/voice",
             "screenshot": "/api/v1/screenshot",
             "process": "/api/v1/process",
+            "messaging": "/api/v1/messaging",
             "docs": "/docs"
         }
     }
