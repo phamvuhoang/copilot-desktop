@@ -68,32 +68,42 @@ AI Copilot for Desktops is a cross-platform desktop AI assistant powered by Elec
 
 ## Google Cloud Setup
 
-To use the Google Cloud services (Speech-to-Text, Text-to-Speech, and Vision), you need to set up a Google Cloud project and create a service account.
+To use the Google Cloud services (Speech-to-Text, Text-to-Speech, Vision, and Gemini), you need to set up a Google Cloud project and create a service account.
 
-### Creating a Service Account
+**📖 For detailed step-by-step instructions, see [server/GOOGLE_CLOUD_SETUP.md](server/GOOGLE_CLOUD_SETUP.md)**
 
-1.  **Go to the Google Cloud Console:** [https://console.cloud.google.com/](https://console.cloud.google.com/)
-2.  **Create a new project** or select an existing one.
-3.  **Navigate to "IAM & Admin" > "Service Accounts".**
-4.  **Click "Create Service Account".**
-5.  **Give the service account a name** (e.g., "copilot-desktop-service-account").
-6.  **Grant the service account the "Editor" role** for simplicity. For production environments, it is recommended to create a custom role with only the necessary permissions.
-7.  **Click "Done" to create the service account.**
-8.  **Click on the newly created service account.**
-9.  **Go to the "Keys" tab and click "Add Key" > "Create new key".**
-10. **Select "JSON" as the key type and click "Create".** A JSON file will be downloaded to your computer.
-11. **Rename the downloaded JSON file to `service-account-key.json`** and place it in the `server` and update `server/config/settings.py` if necessary.
+### Quick Setup Summary
 
-### Enabling APIs
+1.  **Create a Google Cloud Project**
+    - Go to [Google Cloud Console](https://console.cloud.google.com/)
+    - Create a new project (e.g., `copilot-desktop-123456`)
+    - Note your project ID and project number
 
-You need to enable the following APIs for your project:
+2.  **Enable Required APIs**
+    - Cloud Speech-to-Text API
+    - Cloud Text-to-Speech API
+    - Cloud Vision API
+    - Generative Language API (for Gemini)
 
-*   **Cloud Speech-to-Text API**
-*   **Cloud Text-to-Speech API**
-*   **Cloud Vision API**
-*   **Vertex AI API** (for Gemini)
+3.  **Create a Service Account**
+    - Navigate to "IAM & Admin" > "Service Accounts"
+    - Create a new service account
+    - Grant appropriate roles (Speech Client, Text-to-Speech Client, Vision API User)
+    - Download the JSON key file
+    - Save as `service-account-key.json` in the `server/` directory
 
-You can enable these APIs by navigating to the **"APIs & Services" > "Library"** in the Google Cloud Console and searching for each API.
+4.  **Get Gemini API Key**
+    - Visit [Google AI Studio](https://aistudio.google.com/app/apikey)
+    - Create an API key for your project
+    - Copy the API key
+
+5.  **Update Configuration**
+    - Copy `server/.env.example` to `server/.env`
+    - Update `GOOGLE_CLOUD_PROJECT_ID` with your project ID
+    - Update `GEMINI_API_KEY` with your Gemini API key
+    - Verify `GOOGLE_APPLICATION_CREDENTIALS` points to `service-account-key.json`
+
+For complete instructions with screenshots and troubleshooting, see the [detailed setup guide](server/GOOGLE_CLOUD_SETUP.md).
 
 ## Usage
 
