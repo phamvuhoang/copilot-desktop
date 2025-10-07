@@ -10,6 +10,7 @@ AI Copilot for Desktops is a cross-platform desktop AI assistant powered by Elec
 -   **Speech-to-Text (STT):** Convert spoken language into text.
 -   **Text-to-Speech (TTS):** Convert text into spoken language.
 -   **Multiple AI Providers:** Supports various AI providers like OpenAI, Google Gemini, and Ollama.
+-   **Messaging Assistance (Experimental):** Monitor screen for new messages and generate AI-powered draft replies.
 
 ## Tech Stack
 
@@ -121,6 +122,100 @@ For complete instructions with screenshots and troubleshooting, see the [detaile
     ```bash
     npm start
     ```
+
+## Messaging Assistance Feature (Experimental)
+
+The messaging assistance feature helps you monitor for new messages and generate AI-powered draft replies.
+
+### ✨ Recent Improvements (October 2025)
+
+The application detection system has been completely overhauled for better reliability:
+
+-   ✅ **Cross-Platform Support**: Now works reliably on macOS, Windows, and Linux
+-   ✅ **Smart App Detection**: Automatically detects Gmail, Slack, Discord, Teams, and more
+-   ✅ **Web App Support**: Recognizes web apps in browsers (Gmail in Chrome, Slack Web, etc.)
+-   ✅ **Better Accuracy**: Handles platform-specific app name variations automatically
+-   ✅ **Comprehensive Logging**: Detailed logs for easy troubleshooting
+
+See [APPLICATION_DETECTION_FIX.md](APPLICATION_DETECTION_FIX.md) for technical details.
+
+### How It Works
+
+1. **Configure Settings**: Click the settings icon (⚙️) to select which apps to monitor and set check interval
+2. **Start Watching**: Click the eye icon (👁️) button to start monitoring for new messages
+3. **Automatic Detection**: The app uses OS-level window detection and OCR to identify messages
+4. **AI-Powered Replies**: When a new message is detected, click "Copy Draft Reply" to generate an AI response
+5. **Manual Pasting**: Paste the draft (Cmd+V / Ctrl+V) into your messaging application
+
+### Supported Applications
+
+**Messaging Apps:**
+- Slack (desktop and web)
+- Discord (desktop and web)
+- Microsoft Teams (desktop and web)
+- WhatsApp (desktop and web)
+- Telegram (desktop and web)
+
+**Email Clients:**
+- Gmail (web)
+- Outlook (desktop and web)
+- Thunderbird
+
+**Browsers:**
+- Google Chrome
+- Firefox
+- Microsoft Edge
+- Safari
+
+### Important Limitations
+
+⚠️ **This is an experimental feature with known limitations:**
+
+-   **Accuracy**: Message detection uses window detection + OCR, which may not work reliably in all scenarios
+-   **Screen Layout**: Works best with messaging apps that have consistent layouts
+-   **Performance**: Captures screenshots periodically, which may impact system performance
+-   **Privacy**: Screenshots are processed locally and sent to the backend for OCR analysis
+-   **Manual Action Required**: You must manually paste the generated reply - no automated clicking or typing
+
+### Requirements
+
+**Platform-Specific:**
+-   **macOS**: Accessibility and screen recording permissions
+-   **Windows**: PowerShell execution policy allows scripts
+-   **Linux**: `xdotool` and `xprop` installed (`sudo apt-get install xdotool x11-utils`)
+
+**General:**
+-   Backend server running with Google Cloud Vision API configured
+-   Messaging application visible on screen
+-   App selected in monitoring settings
+
+### Best Practices
+
+1. **Configure First**: Open settings (⚙️) and select which apps to monitor
+2. **Test First**: Try the feature with a test conversation to understand its behavior
+3. **Review Drafts**: Always review AI-generated replies before sending
+4. **Check Logs**: If detection isn't working, check backend logs for detailed information
+5. **Stop When Not Needed**: Click the eye icon again to stop monitoring and save system resources
+
+### Troubleshooting
+
+**No messages detected?**
+1. Check that the app is selected in monitoring settings
+2. Verify screen recording/accessibility permissions are granted
+3. Check backend logs for detection details
+4. See [APPLICATION_DETECTION_TESTING_GUIDE.md](APPLICATION_DETECTION_TESTING_GUIDE.md)
+
+**App not detected correctly?**
+1. Check backend logs for raw app name
+2. Report the issue with app name and platform
+3. See [APPLICATION_DETECTION_FIX.md](APPLICATION_DETECTION_FIX.md) for adding new apps
+
+### Documentation
+
+-   **Quick Start**: [MESSAGING_ASSISTANCE_QUICK_START.md](MESSAGING_ASSISTANCE_QUICK_START.md)
+-   **Technical Details**: [APPLICATION_DETECTION_FIX.md](APPLICATION_DETECTION_FIX.md)
+-   **Testing Guide**: [APPLICATION_DETECTION_TESTING_GUIDE.md](APPLICATION_DETECTION_TESTING_GUIDE.md)
+-   **Version 2 Updates**: [MESSAGING_ASSISTANCE_V2_UPDATE.md](MESSAGING_ASSISTANCE_V2_UPDATE.md)
 
 ## Project Structure
 

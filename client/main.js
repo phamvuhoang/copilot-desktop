@@ -1,4 +1,4 @@
-const { app, BrowserWindow, Tray, Menu, globalShortcut, ipcMain, dialog, desktopCapturer, shell } = require('electron');
+const { app, BrowserWindow, Tray, Menu, globalShortcut, ipcMain, dialog, desktopCapturer, shell, clipboard } = require('electron');
 const path = require('path');
 const AutoLaunch = require('auto-launch');
 
@@ -257,6 +257,300 @@ class AICopilotApp {
           error: error.message,
           message: `Failed to open ${applicationName}: ${error.message}`
         };
+      }
+    });
+
+    // Clipboard-based text insertion (safer alternative to robotjs)
+    ipcMain.handle('copy-to-clipboard', async (event, text) => {
+      try {
+        clipboard.writeText(text);
+        return { success: true };
+      } catch (error) {
+        console.error('Error copying to clipboard:', error);
+        return { success: false, error: error.message };
+      }
+    });
+
+    ipcMain.handle('get-clipboard-text', async () => {
+      try {
+        const text = clipboard.readText();
+        return { success: true, text };
+      } catch (error) {
+        console.error('Error reading clipboard:', error);
+        return { success: false, error: error.message };
+      }
+    });
+
+    // Get active window title (for app detection)
+    ipcMain.handle('get-active-window-title', async () => {
+      try {
+        if (process.platform === 'darwin') {
+          // macOS: Use AppleScript to get frontmost app
+          const { execSync } = require('child_process');
+
+          // Get app name
+          const appScript = 'tell application "System Events" to get name of first application process whose frontmost is true';
+          const appName = execSync(`osascript -e '${appScript}'`, { encoding: 'utf8' }).trim();
+
+          // Get window title (may fail for some apps)
+          let windowTitle = '';
+          try {
+            const windowScript = `tell application "System Events" to get name of front window of application process "${appName}"`;
+            windowTitle = execSync(`osascript -e '${windowScript}'`, { encoding: 'utf8' }).trim();
+          } catch (e) {
+            console.log('Could not get window title, using app name only');
+            windowTitle = appName;
+          }
+
+          const fullTitle = `${appName} | ${windowTitle}`;
+          console.log(`Active window detected: ${fullTitle}`);
+          return { success: true, appName, windowTitle, fullTitle };
+        } else if (process.platform === 'win32') {
+          // Windows: Use PowerShell to get both window title and process name
+          const { execSync } = require('child_process');
+
+          try {
+            // Enhanced PowerShell script to get window title and process name
+            const script = `
+Add-Type @"
+  using System;
+  using System.Runtime.InteropServices;
+  using System.Text;
+  public class Win32 {
+    [DllImport("user32.dll")]
+    public static extern IntPtr GetForegroundWindow();
+    [DllImport("user32.dll")]
+    public static extern int GetWindowText(IntPtr hWnd, StringBuilder text, int count);
+    [DllImport("user32.dll")]
+    public static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint processId);
+  }
+"@
+
+$hwnd = [Win32]::GetForegroundWindow()
+
+# Get window title
+$title = New-Object System.Text.StringBuilder 256
+[Win32]::GetWindowText($hwnd, $title, 256)
+$windowTitle = $title.ToString()
+
+# Get process name
+$processId = 0
+[Win32]::GetWindowThreadProcessId($hwnd, [ref]$processId) | Out-Null
+$process = Get-Process -Id $processId -ErrorAction SilentlyContinue
+
+if ($process) {
+  $processName = $process.ProcessName
+  # Try to get main window title from process
+  if ($process.MainWindowTitle) {
+    $windowTitle = $process.MainWindowTitle
+  }
+} else {
+  $processName = "unknown"
+}
+
+# Output as JSON for easier parsing
+@{
+  processName = $processName
+  windowTitle = $windowTitle
+} | ConvertTo-Json -Compress
+`;
+
+            const result = execSync(`powershell -Command "${script.replace(/"/g, '\\"')}"`, {
+              encoding: 'utf8',
+              timeout: 5000
+            }).trim();
+
+            console.log('Windows PowerShell result:', result);
+
+            // Parse JSON result
+            const data = JSON.parse(result);
+            let appName = data.processName || 'unknown';
+            let windowTitle = data.windowTitle || '';
+
+            // If we got a process name, try to make it more readable
+            if (appName !== 'unknown') {
+              // Common app name mappings
+              const appNameMappings = {
+                'chrome': 'Google Chrome',
+                'firefox': 'Firefox',
+                'msedge': 'Microsoft Edge',
+                'slack': 'Slack',
+                'discord': 'Discord',
+                'teams': 'Microsoft Teams',
+                'outlook': 'Microsoft Outlook',
+                'telegram': 'Telegram',
+                'whatsapp': 'WhatsApp'
+              };
+
+              const lowerAppName = appName.toLowerCase();
+              appName = appNameMappings[lowerAppName] || appName;
+            }
+
+            // If window title contains " - " pattern, try to parse it
+            // Format is usually: "Content - Application Name"
+            if (windowTitle.includes(' - ')) {
+              const parts = windowTitle.split(' - ');
+              if (parts.length >= 2) {
+                const lastPart = parts[parts.length - 1].trim();
+                // Check if last part looks like an app name
+                if (lastPart.length > 0 && lastPart.length < 50) {
+                  // If we don't have a good app name from process, use the parsed one
+                  if (appName === 'unknown' || appName.toLowerCase().endsWith('.exe')) {
+                    appName = lastPart;
+                  }
+                  // Window title is everything before the last " - "
+                  windowTitle = parts.slice(0, -1).join(' - ').trim();
+                }
+              }
+            }
+
+            const fullTitle = `${appName} | ${windowTitle}`;
+            console.log(`Windows active window detected: ${fullTitle}`);
+            return { success: true, appName, windowTitle, fullTitle };
+
+          } catch (error) {
+            console.error('Error in Windows window detection:', error);
+            // Fallback to basic title detection
+            try {
+              const basicScript = `
+Add-Type @"
+  using System;
+  using System.Runtime.InteropServices;
+  using System.Text;
+  public class Win32 {
+    [DllImport("user32.dll")]
+    public static extern IntPtr GetForegroundWindow();
+    [DllImport("user32.dll")]
+    public static extern int GetWindowText(IntPtr hWnd, StringBuilder text, int count);
+  }
+"@
+$hwnd = [Win32]::GetForegroundWindow()
+$title = New-Object System.Text.StringBuilder 256
+[Win32]::GetWindowText($hwnd, $title, 256)
+$title.ToString()
+`;
+              const result = execSync(`powershell -Command "${basicScript.replace(/"/g, '\\"')}"`, {
+                encoding: 'utf8',
+                timeout: 5000
+              }).trim();
+
+              // Parse title to extract app name
+              let appName = 'unknown';
+              let windowTitle = result;
+
+              if (result.includes(' - ')) {
+                const parts = result.split(' - ');
+                if (parts.length >= 2) {
+                  appName = parts[parts.length - 1].trim();
+                  windowTitle = parts.slice(0, -1).join(' - ').trim();
+                }
+              }
+
+              const fullTitle = `${appName} | ${windowTitle}`;
+              console.log(`Windows active window detected (fallback): ${fullTitle}`);
+              return { success: true, appName, windowTitle, fullTitle };
+            } catch (fallbackError) {
+              console.error('Windows fallback also failed:', fallbackError);
+              return { success: false, error: fallbackError.message };
+            }
+          }
+        } else {
+          // Linux: Use xprop for app name and xdotool for window title
+          const { execSync } = require('child_process');
+
+          try {
+            // Get active window ID
+            const windowId = execSync('xdotool getactivewindow', { encoding: 'utf8' }).trim();
+            console.log('Linux window ID:', windowId);
+
+            // Get window title
+            const windowTitle = execSync(`xdotool getwindowname ${windowId}`, { encoding: 'utf8' }).trim();
+            console.log('Linux window title:', windowTitle);
+
+            // Get WM_CLASS for app name
+            let appName = 'unknown';
+            try {
+              const wmClass = execSync(`xprop -id ${windowId} WM_CLASS`, { encoding: 'utf8' }).trim();
+              console.log('Linux WM_CLASS:', wmClass);
+
+              // Parse WM_CLASS output: WM_CLASS(STRING) = "instance", "class"
+              // We want the class name (second value)
+              const match = wmClass.match(/WM_CLASS\(STRING\)\s*=\s*"([^"]+)",\s*"([^"]+)"/);
+              if (match && match[2]) {
+                appName = match[2];
+
+                // Common app name mappings for Linux
+                const appNameMappings = {
+                  'Google-chrome': 'Google Chrome',
+                  'google-chrome': 'Google Chrome',
+                  'Chromium': 'Chromium',
+                  'Firefox': 'Firefox',
+                  'firefox': 'Firefox',
+                  'Slack': 'Slack',
+                  'slack': 'Slack',
+                  'discord': 'Discord',
+                  'Discord': 'Discord',
+                  'Microsoft Teams': 'Microsoft Teams',
+                  'teams': 'Microsoft Teams',
+                  'Telegram': 'Telegram',
+                  'telegram': 'Telegram'
+                };
+
+                appName = appNameMappings[appName] || appName;
+              }
+            } catch (wmClassError) {
+              console.log('Could not get WM_CLASS, will try parsing window title');
+            }
+
+            // If we still don't have an app name, try parsing window title
+            if (appName === 'unknown' && windowTitle.includes(' - ')) {
+              const parts = windowTitle.split(' - ');
+              if (parts.length >= 2) {
+                const lastPart = parts[parts.length - 1].trim();
+                if (lastPart.length > 0 && lastPart.length < 50) {
+                  appName = lastPart;
+                }
+              }
+            }
+
+            const fullTitle = `${appName} | ${windowTitle}`;
+            console.log(`Linux active window detected: ${fullTitle}`);
+            return { success: true, appName, windowTitle, fullTitle };
+
+          } catch (error) {
+            console.error('Error in Linux window detection:', error);
+
+            // Fallback to wmctrl
+            try {
+              const result = execSync('wmctrl -lx | grep $(xprop -root _NET_ACTIVE_WINDOW | cut -d\\# -f2)', {
+                encoding: 'utf8',
+                timeout: 5000
+              }).trim();
+
+              // wmctrl output format: window_id desktop class hostname title
+              const parts = result.split(/\s+/);
+              let appName = 'unknown';
+              let windowTitle = result;
+
+              if (parts.length >= 3) {
+                appName = parts[2].split('.')[1] || parts[2]; // Get class name
+                windowTitle = parts.slice(4).join(' '); // Title is everything after hostname
+              }
+
+              const fullTitle = `${appName} | ${windowTitle}`;
+              console.log(`Linux active window detected (wmctrl fallback): ${fullTitle}`);
+              return { success: true, appName, windowTitle, fullTitle };
+
+            } catch (fallbackError) {
+              console.error('Linux fallback also failed:', fallbackError);
+              return { success: false, error: fallbackError.message };
+            }
+          }
+        }
+      } catch (error) {
+        console.error('Error getting active window title:', error);
+        console.error('Error details:', error.stack);
+        return { success: false, error: error.message, details: error.stack };
       }
     });
   }

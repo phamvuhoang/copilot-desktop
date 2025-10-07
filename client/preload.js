@@ -15,4 +15,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // Application opening functionality
   openApplication: (applicationName) => ipcRenderer.invoke('open-application', applicationName),
+
+  // Clipboard functionality (safer alternative to automation)
+  copyToClipboard: (text) => ipcRenderer.invoke('copy-to-clipboard', text),
+  getClipboardText: () => ipcRenderer.invoke('get-clipboard-text'),
+
+  // Active window detection (for app filtering)
+  getActiveWindowTitle: () => ipcRenderer.invoke('get-active-window-title'),
 });
