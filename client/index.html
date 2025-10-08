@@ -67,57 +67,83 @@
                     </div>
                 </div>
 
-                <!-- Messaging Settings Modal -->
-                <div class="modal" id="messagingSettingsModal" style="display: none;">
-                    <div class="modal-content">
+                <!-- Settings Modal -->
+                <div class="modal" id="settingsModal" style="display: none;">
+                    <div class="modal-content settings-modal-content">
                         <div class="modal-header">
-                            <h3>Messaging Assistance Settings</h3>
-                            <button class="modal-close" id="closeMessagingSettings">×</button>
+                            <h3>Settings</h3>
+                            <button class="modal-close" id="closeSettings">×</button>
                         </div>
                         <div class="modal-body">
-                            <div class="settings-group">
-                                <label>Check Interval (seconds)</label>
-                                <input type="number" id="checkInterval" min="5" max="300" value="10" />
-                                <small>How often to check for new messages (5-300 seconds)</small>
+                            <!-- General Settings Section -->
+                            <div class="settings-section">
+                                <h4 class="settings-section-title">General</h4>
+
+                                <div class="settings-group">
+                                    <label class="settings-toggle">
+                                        <input type="checkbox" id="alwaysOnTopToggle" />
+                                        <span class="toggle-label">Always on Top</span>
+                                        <small>Keep window above other applications</small>
+                                    </label>
+                                </div>
                             </div>
 
-                            <div class="settings-group">
-                                <label>Monitor These Apps</label>
-                                <div class="app-checkboxes">
-                                    <label class="checkbox-label">
-                                        <input type="checkbox" class="app-checkbox" value="chrome" checked />
-                                        <span>Chrome / Browser</span>
-                                    </label>
-                                    <label class="checkbox-label">
-                                        <input type="checkbox" class="app-checkbox" value="slack" checked />
-                                        <span>Slack</span>
-                                    </label>
-                                    <label class="checkbox-label">
-                                        <input type="checkbox" class="app-checkbox" value="discord" />
-                                        <span>Discord</span>
-                                    </label>
-                                    <label class="checkbox-label">
-                                        <input type="checkbox" class="app-checkbox" value="teams" />
-                                        <span>Microsoft Teams</span>
-                                    </label>
-                                    <label class="checkbox-label">
-                                        <input type="checkbox" class="app-checkbox" value="outlook" />
-                                        <span>Outlook / Mail</span>
-                                    </label>
-                                    <label class="checkbox-label">
-                                        <input type="checkbox" class="app-checkbox" value="whatsapp" />
-                                        <span>WhatsApp</span>
-                                    </label>
-                                    <label class="checkbox-label">
-                                        <input type="checkbox" class="app-checkbox" value="telegram" />
-                                        <span>Telegram</span>
-                                    </label>
+                            <!-- Messaging Settings Section -->
+                            <div class="settings-section">
+                                <h4 class="settings-section-title">Messaging Assistance</h4>
+
+                                <div class="settings-group">
+                                    <label>Check Interval (seconds)</label>
+                                    <input type="number" id="checkInterval" min="5" max="300" value="10" />
+                                    <small>How often to check for new messages (5-300 seconds)</small>
+                                </div>
+
+                                <div class="settings-group">
+                                    <label>Monitor These Apps</label>
+                                    <div class="app-checkboxes">
+                                        <label class="checkbox-label">
+                                            <input type="checkbox" class="app-checkbox" value="chrome" checked />
+                                            <span>Chrome / Browser</span>
+                                        </label>
+                                        <label class="checkbox-label">
+                                            <input type="checkbox" class="app-checkbox" value="slack" checked />
+                                            <span>Slack</span>
+                                        </label>
+                                        <label class="checkbox-label">
+                                            <input type="checkbox" class="app-checkbox" value="discord" />
+                                            <span>Discord</span>
+                                        </label>
+                                        <label class="checkbox-label">
+                                            <input type="checkbox" class="app-checkbox" value="teams" />
+                                            <span>Microsoft Teams</span>
+                                        </label>
+                                        <label class="checkbox-label">
+                                            <input type="checkbox" class="app-checkbox" value="outlook" />
+                                            <span>Outlook / Mail</span>
+                                        </label>
+                                        <label class="checkbox-label">
+                                            <input type="checkbox" class="app-checkbox" value="gmail" />
+                                            <span>Gmail</span>
+                                        </label>
+                                        <label class="checkbox-label">
+                                            <input type="checkbox" class="app-checkbox" value="whatsapp" />
+                                            <span>WhatsApp</span>
+                                        </label>
+                                        <label class="checkbox-label">
+                                            <input type="checkbox" class="app-checkbox" value="telegram" />
+                                            <span>Telegram</span>
+                                        </label>
+                                        <label class="checkbox-label">
+                                            <input type="checkbox" class="app-checkbox" value="signal" />
+                                            <span>Signal</span>
+                                        </label>
+                                    </div>
                                 </div>
                             </div>
                         </div>
                         <div class="modal-footer">
-                            <button class="btn-secondary" id="cancelMessagingSettings">Cancel</button>
-                            <button class="btn-primary" id="saveMessagingSettings">Save Settings</button>
+                            <button class="btn-secondary" id="cancelSettings">Cancel</button>
+                            <button class="btn-primary" id="saveSettings">Save Settings</button>
                         </div>
                     </div>
                 </div>
@@ -161,12 +187,6 @@
                                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                     <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
                                     <circle cx="12" cy="12" r="3"></circle>
-                                </svg>
-                            </button>
-                            <button id="messagingSettingsBtn" class="control-btn" title="Messaging settings">
-                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                    <circle cx="12" cy="12" r="3"></circle>
-                                    <path d="M12 1v6m0 6v6m5.2-13.2l-4.2 4.2m0 6l4.2 4.2M23 12h-6m-6 0H1m18.2-5.2l-4.2 4.2m0 6l4.2 4.2"></path>
                                 </svg>
                             </button>
                             <button id="sendBtn" class="control-btn send-btn" title="Send message">

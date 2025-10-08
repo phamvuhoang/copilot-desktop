@@ -9,6 +9,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   hideWindow: () => ipcRenderer.invoke('hide-window'),
   showWindow: () => ipcRenderer.invoke('show-window'),
   toggleOverlayMode: () => ipcRenderer.invoke('toggle-overlay-mode'),
+  setAlwaysOnTop: (enabled) => ipcRenderer.invoke('set-always-on-top', enabled),
 
   // Screenshot functionality
   getScreenSources: () => ipcRenderer.invoke('get-screen-sources'),

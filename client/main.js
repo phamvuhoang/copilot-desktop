@@ -8,6 +8,7 @@ class AICopilotApp {
     this.tray = null;
     this.isQuitting = false;
     this.isOverlayMode = false;
+    this.isAlwaysOnTop = false;
 
     // Initialize auto-launch
     this.autoLauncher = new AutoLaunch({
@@ -95,6 +96,26 @@ class AICopilotApp {
 
     // Show window when ready
     this.mainWindow.once('ready-to-show', () => {
+      // Load always-on-top setting from localStorage via renderer
+      this.mainWindow.webContents.executeJavaScript(`
+        try {
+          const settings = localStorage.getItem('appSettings');
+          if (settings) {
+            const parsed = JSON.parse(settings);
+            return parsed.alwaysOnTop || false;
+          }
+          return false;
+        } catch (e) {
+          return false;
+        }
+      `).then(alwaysOnTop => {
+        if (alwaysOnTop) {
+          this.setAlwaysOnTop(true);
+        }
+      }).catch(err => {
+        console.error('Failed to load always-on-top setting:', err);
+      });
+
       if (process.argv.includes('--show-on-start')) {
         this.showWindow();
       }
@@ -164,6 +185,20 @@ class AICopilotApp {
         `Failed to register global shortcut: ${overlayShortcut}`
       );
     }
+
+    // Register global shortcut for always-on-top toggle
+    const alwaysOnTopShortcut = process.platform === 'darwin' ? 'Command+Shift+T' : 'Ctrl+Shift+T';
+    const alwaysOnTopRegistered = globalShortcut.register(alwaysOnTopShortcut, () => {
+      this.setAlwaysOnTop(!this.isAlwaysOnTop);
+      // Send notification to renderer
+      if (this.mainWindow) {
+        this.mainWindow.webContents.send('always-on-top-changed', this.isAlwaysOnTop);
+      }
+    });
+
+    if (!alwaysOnTopRegistered) {
+      console.error('Failed to register global shortcut:', alwaysOnTopShortcut);
+    }
   }
 
   setupEventHandlers() {
@@ -174,6 +209,10 @@ class AICopilotApp {
 
     ipcMain.handle('toggle-overlay-mode', () => {
       this.toggleOverlayMode();
+    });
+
+    ipcMain.handle('set-always-on-top', (event, enabled) => {
+      this.setAlwaysOnTop(enabled);
     });
 
     ipcMain.handle('toggle-window', () => {
@@ -606,10 +645,27 @@ $title.ToString()
     } else {
       // Exit overlay mode: back to normal
       this.mainWindow.setOpacity(1.0);
-      this.mainWindow.setAlwaysOnTop(false);
+      // Only disable always-on-top if it's not enabled via settings
+      if (!this.isAlwaysOnTop) {
+        this.mainWindow.setAlwaysOnTop(false);
+      }
       this.mainWindow.setResizable(true);
       this.mainWindow.setHasShadow(true);
       // No need to reset focusable or mouse events since we didn't change them
+    }
+  }
+
+  setAlwaysOnTop(enabled) {
+    if (!this.mainWindow) {
+      return;
+    }
+
+    this.isAlwaysOnTop = enabled;
+
+    // Don't change always-on-top if overlay mode is active
+    // Overlay mode manages its own always-on-top state
+    if (!this.isOverlayMode) {
+      this.mainWindow.setAlwaysOnTop(enabled);
     }
   }
 

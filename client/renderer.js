@@ -24,13 +24,15 @@ class AICopilotRenderer {
         // Message watching
         this.isWatchingMessages = false;
         this.messageWatcherInterval = null;
-        this.seenMessages = new Set(); // Track seen messages to avoid duplicates
+        this.seenMessages = new Map(); // Track seen messages with timestamps
         this.messageCheckInterval = 10000; // 10 seconds default
         this.detectedMessages = []; // Store all detected messages
         this.monitoredApps = ['chrome', 'slack']; // Default apps to monitor
+        this.messageExpirationTime = 24 * 60 * 60 * 1000; // 24 hours in milliseconds
 
         // Load settings from localStorage
         this.loadMessagingSettings();
+        this.loadSeenMessages();
 
         this.init();
     }
@@ -99,7 +101,6 @@ class AICopilotRenderer {
         document.getElementById('voiceBtn').addEventListener('click', () => this.handleVoiceInput());
         document.getElementById('screenshotBtn').addEventListener('click', () => this.handleScreenshot());
         document.getElementById('watchMessagesBtn').addEventListener('click', () => this.toggleMessageWatcher());
-        document.getElementById('messagingSettingsBtn').addEventListener('click', () => this.openMessagingSettings());
 
         // Screenshot preview controls
         document.getElementById('screenshotClose').addEventListener('click', () => this.closeScreenshotPreview());
@@ -722,9 +723,64 @@ class AICopilotRenderer {
     }
 
     openSettings() {
-        // TODO: Implement settings
-        console.log('Settings not yet implemented');
-        this.addMessage('Settings panel will be implemented in a future update.', 'assistant');
+        const modal = document.getElementById('settingsModal');
+        const intervalInput = document.getElementById('checkInterval');
+        const checkboxes = document.querySelectorAll('.app-checkbox');
+        const alwaysOnTopToggle = document.getElementById('alwaysOnTopToggle');
+
+        // Load current settings
+        const settings = this.loadAllSettings();
+
+        // Set messaging settings
+        intervalInput.value = this.messageCheckInterval / 1000;
+        checkboxes.forEach(checkbox => {
+            checkbox.checked = this.monitoredApps.includes(checkbox.value);
+        });
+
+        // Set always-on-top setting
+        alwaysOnTopToggle.checked = settings.alwaysOnTop || false;
+
+        modal.style.display = 'flex';
+
+        // Event handlers
+        const closeBtn = document.getElementById('closeSettings');
+        const cancelBtn = document.getElementById('cancelSettings');
+        const saveBtn = document.getElementById('saveSettings');
+
+        const closeModal = () => {
+            modal.style.display = 'none';
+        };
+
+        closeBtn.onclick = closeModal;
+        cancelBtn.onclick = closeModal;
+
+        saveBtn.onclick = () => {
+            // Save messaging settings
+            const intervalSeconds = parseInt(intervalInput.value);
+            if (intervalSeconds >= 5 && intervalSeconds <= 300) {
+                this.messageCheckInterval = intervalSeconds * 1000;
+            }
+
+            this.monitoredApps = Array.from(checkboxes)
+                .filter(cb => cb.checked)
+                .map(cb => cb.value);
+
+            this.saveMessagingSettings();
+
+            // Save always-on-top setting
+            const alwaysOnTop = alwaysOnTopToggle.checked;
+            this.saveAlwaysOnTopSetting(alwaysOnTop);
+            window.electronAPI.setAlwaysOnTop(alwaysOnTop);
+
+            // Restart watcher if active
+            if (this.isWatchingMessages) {
+                this.stopMessageWatcher();
+                this.startMessageWatcher();
+            }
+
+            closeModal();
+            this.addMessage('Settings saved successfully.', 'system');
+        };
     }
 
     // Voice input implementation
@@ -1304,7 +1360,9 @@ class AICopilotRenderer {
 
     startMessageWatcher() {
         this.isWatchingMessages = true;
-        this.seenMessages.clear(); // Clear seen messages when starting
+        // Don't clear seen messages - keep them for deduplication across sessions
+        // Clean up expired messages instead
+        this.cleanupExpiredMessages();
         this.detectedMessages = []; // Clear detected messages
 
         const intervalSeconds = this.messageCheckInterval / 1000;
@@ -1326,6 +1384,8 @@ class AICopilotRenderer {
             clearInterval(this.messageWatcherInterval);
             this.messageWatcherInterval = null;
         }
+        // Save seen messages to localStorage when stopping
+        this.saveSeenMessages();
         this.closeMessagesPanel();
     }
 
@@ -1379,17 +1439,21 @@ class AICopilotRenderer {
             const data = await response.json();
             if (data.messages && data.messages.length > 0) {
                 let newMessageCount = 0;
+                const now = Date.now();
+
                 data.messages.forEach(msg => {
                     // Create unique identifier for deduplication
-                    const messageKey = `${msg.sender}:${msg.snippet}`;
+                    // Use a hash of sender + snippet for better uniqueness
+                    const messageKey = this.createMessageKey(msg.sender, msg.snippet);
 
                     if (!this.seenMessages.has(messageKey)) {
-                        this.seenMessages.add(messageKey);
+                        // Store with timestamp for expiration tracking
+                        this.seenMessages.set(messageKey, now);
                         newMessageCount++;
 
                         // Add to detected messages array
                         const messageData = {
-                            id: `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+                            id: `msg_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
                             sender: msg.sender,
                             snippet: msg.snippet,
                             app: msg.app || 'unknown',
@@ -1403,12 +1467,22 @@ class AICopilotRenderer {
                     console.log(`Detected ${newMessageCount} new message(s)`);
                     this.updateMessagesPanel();
                     this.showMessagesPanel();
+                    // Save seen messages after detecting new ones
+                    this.saveSeenMessages();
                 }
             }
         } catch (error) {
             console.error('Error checking for new messages:', error);
             // Don't show error to user for background checks, just log it
         }
+    }
+
+    createMessageKey(sender, snippet) {
+        // Create a consistent key for message deduplication
+        // Normalize by trimming and converting to lowercase
+        const normalizedSender = sender.trim().toLowerCase();
+        const normalizedSnippet = snippet.trim().toLowerCase();
+        return `${normalizedSender}:${normalizedSnippet}`;
     }
 
     async getDraftReply(prompt) {
@@ -1551,55 +1625,71 @@ class AICopilotRenderer {
         }
     }
 
-    openMessagingSettings() {
-        const modal = document.getElementById('messagingSettingsModal');
-        const intervalInput = document.getElementById('checkInterval');
-        const checkboxes = document.querySelectorAll('.app-checkbox');
-
-        // Set current values
-        intervalInput.value = this.messageCheckInterval / 1000;
-        checkboxes.forEach(checkbox => {
-            checkbox.checked = this.monitoredApps.includes(checkbox.value);
-        });
-
-        modal.style.display = 'flex';
-
-        // Event handlers
-        const closeBtn = document.getElementById('closeMessagingSettings');
-        const cancelBtn = document.getElementById('cancelMessagingSettings');
-        const saveBtn = document.getElementById('saveMessagingSettings');
-
-        const closeModal = () => {
-            modal.style.display = 'none';
-        };
-
-        closeBtn.onclick = closeModal;
-        cancelBtn.onclick = closeModal;
-
-        saveBtn.onclick = () => {
-            // Get interval value
-            const intervalSeconds = parseInt(intervalInput.value);
-            if (intervalSeconds >= 5 && intervalSeconds <= 300) {
-                this.messageCheckInterval = intervalSeconds * 1000;
+    loadAllSettings() {
+        try {
+            const settings = localStorage.getItem('appSettings');
+            if (settings) {
+                return JSON.parse(settings);
             }
+            return { alwaysOnTop: false };
+        } catch (error) {
+            console.error('Error loading app settings:', error);
+            return { alwaysOnTop: false };
+        }
+    }
 
-            // Get selected apps
-            this.monitoredApps = Array.from(checkboxes)
-                .filter(cb => cb.checked)
-                .map(cb => cb.value);
+    saveAlwaysOnTopSetting(alwaysOnTop) {
+        try {
+            const settings = this.loadAllSettings();
+            settings.alwaysOnTop = alwaysOnTop;
+            localStorage.setItem('appSettings', JSON.stringify(settings));
+        } catch (error) {
+            console.error('Error saving always-on-top setting:', error);
+        }
+    }
 
-            // Save to localStorage
-            this.saveMessagingSettings();
-
-            // Restart watcher if active
-            if (this.isWatchingMessages) {
-                this.stopMessageWatcher();
-                this.startMessageWatcher();
+    loadSeenMessages() {
+        try {
+            const stored = localStorage.getItem('seenMessages');
+            if (stored) {
+                const data = JSON.parse(stored);
+                // Convert array back to Map
+                this.seenMessages = new Map(data);
+                // Clean up expired messages on load
+                this.cleanupExpiredMessages();
             }
+        } catch (error) {
+            console.error('Error loading seen messages:', error);
+            this.seenMessages = new Map();
+        }
+    }
 
-            closeModal();
-            this.addMessage('Messaging settings updated successfully.', 'system');
-        };
+    saveSeenMessages() {
+        try {
+            // Convert Map to array for JSON serialization
+            const data = Array.from(this.seenMessages.entries());
+            localStorage.setItem('seenMessages', JSON.stringify(data));
+        } catch (error) {
+            console.error('Error saving seen messages:', error);
+        }
+    }
+
+    cleanupExpiredMessages() {
+        const now = Date.now();
+        let removedCount = 0;
+
+        // Remove messages older than expiration time
+        for (const [key, timestamp] of this.seenMessages.entries()) {
+            if (now - timestamp > this.messageExpirationTime) {
+                this.seenMessages.delete(key);
+                removedCount++;
+            }
+        }
+
+        if (removedCount > 0) {
+            console.log(`Cleaned up ${removedCount} expired message(s) from deduplication cache`);
+            this.saveSeenMessages();
+        }
     }
 
     // Messages Panel Management
