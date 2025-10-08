@@ -93,6 +93,7 @@ class AICopilotRenderer {
         });
         document.getElementById('minimizeBtn').addEventListener('click', () => this.hideWindow());
         document.getElementById('settingsBtn').addEventListener('click', () => this.openSettings());
+        document.getElementById('overlayBtn').addEventListener('click', () => this.toggleOverlayMode());
 
         // Voice and screenshot buttons
         document.getElementById('voiceBtn').addEventListener('click', () => this.handleVoiceInput());
@@ -698,6 +699,10 @@ class AICopilotRenderer {
     // Window controls
     hideWindow() {
         window.electronAPI.hideWindow();
+    }
+
+    toggleOverlayMode() {
+        window.electronAPI.toggleOverlayMode();
     }
 
     openSettings() {

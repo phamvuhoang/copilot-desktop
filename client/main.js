@@ -7,6 +7,7 @@ class AICopilotApp {
     this.mainWindow = null;
     this.tray = null;
     this.isQuitting = false;
+    this.isOverlayMode = false;
 
     // Initialize auto-launch
     this.autoLauncher = new AutoLaunch({
@@ -149,12 +150,30 @@ class AICopilotApp {
         `Failed to register global shortcut: ${shortcut}`
       );
     }
+
+    // Register global shortcut for overlay mode
+    const overlayShortcut = process.platform === 'darwin' ? 'Command+Shift+O' : 'Ctrl+Shift+O';
+    const overlayRegistered = globalShortcut.register(overlayShortcut, () => {
+      this.toggleOverlayMode();
+    });
+
+    if (!overlayRegistered) {
+      console.error('Failed to register global shortcut:', overlayShortcut);
+      dialog.showErrorBox(
+        'Shortcut Registration Failed',
+        `Failed to register global shortcut: ${overlayShortcut}`
+      );
+    }
   }
 
   setupEventHandlers() {
     // Handle IPC messages from renderer
     ipcMain.handle('app-version', () => {
       return app.getVersion();
+    });
+
+    ipcMain.handle('toggle-overlay-mode', () => {
+      this.toggleOverlayMode();
     });
 
     ipcMain.handle('toggle-window', () => {
@@ -564,6 +583,34 @@ $title.ToString()
       if (process.platform === 'darwin') {
         app.dock.show();
       }
+    }
+  }
+
+  toggleOverlayMode() {
+    if (!this.mainWindow) {
+      return;
+    }
+
+    this.isOverlayMode = !this.isOverlayMode;
+
+    if (this.isOverlayMode) {
+      // Enter overlay mode: semi-transparent, click-through, always on top
+      this.mainWindow.setOpacity(0.7);
+      this.mainWindow.setAlwaysOnTop(true, 'screen-saver');
+      this.mainWindow.setResizable(false);
+      this.mainWindow.setHasShadow(false);
+      this.mainWindow.setFrame(false);
+      this.mainWindow.setFocusable(false); // Allows click-through
+      this.mainWindow.setIgnoreMouseEvents(true, { forward: true });
+    } else {
+      // Exit overlay mode: back to normal
+      this.mainWindow.setOpacity(1.0);
+      this.mainWindow.setAlwaysOnTop(false);
+      this.mainWindow.setResizable(true);
+      this.mainWindow.setHasShadow(true);
+      this.mainWindow.setFrame(true);
+      this.mainWindow.setFocusable(true);
+      this.mainWindow.setIgnoreMouseEvents(false);
     }
   }
 
