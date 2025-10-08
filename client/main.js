@@ -594,23 +594,22 @@ $title.ToString()
     this.isOverlayMode = !this.isOverlayMode;
 
     if (this.isOverlayMode) {
-      // Enter overlay mode: semi-transparent, click-through, always on top
+      // Enter overlay mode: semi-transparent, always on top
+      // Note: We keep the window interactive (no click-through) so users can still use buttons
       this.mainWindow.setOpacity(0.7);
       this.mainWindow.setAlwaysOnTop(true, 'screen-saver');
       this.mainWindow.setResizable(false);
       this.mainWindow.setHasShadow(false);
-      this.mainWindow.setFrame(false);
-      this.mainWindow.setFocusable(false); // Allows click-through
-      this.mainWindow.setIgnoreMouseEvents(true, { forward: true });
+      // Keep window focusable and interactive - don't set click-through
+      // this.mainWindow.setFocusable(false); // REMOVED - would make window non-interactive
+      // this.mainWindow.setIgnoreMouseEvents(true); // REMOVED - would make window click-through
     } else {
       // Exit overlay mode: back to normal
       this.mainWindow.setOpacity(1.0);
       this.mainWindow.setAlwaysOnTop(false);
       this.mainWindow.setResizable(true);
       this.mainWindow.setHasShadow(true);
-      this.mainWindow.setFrame(true);
-      this.mainWindow.setFocusable(true);
-      this.mainWindow.setIgnoreMouseEvents(false);
+      // No need to reset focusable or mouse events since we didn't change them
     }
   }
 
