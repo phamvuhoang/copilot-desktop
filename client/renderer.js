@@ -93,6 +93,7 @@ class AICopilotRenderer {
         });
         document.getElementById('minimizeBtn').addEventListener('click', () => this.hideWindow());
         document.getElementById('settingsBtn').addEventListener('click', () => this.openSettings());
+        document.getElementById('overlayBtn').addEventListener('click', () => this.toggleOverlayMode());
 
         // Voice and screenshot buttons
         document.getElementById('voiceBtn').addEventListener('click', () => this.handleVoiceInput());
@@ -251,6 +252,16 @@ class AICopilotRenderer {
 
             const data = await response.json();
 
+            // Debug logging
+            console.log('=== PROCESS RESPONSE DEBUG ===');
+            console.log('Has action:', !!data.action);
+            console.log('Has response:', !!data.response);
+            console.log('Action value:', data.action);
+            console.log('Response value:', data.response);
+            console.log('Intent:', data.intent);
+            console.log('Full response:', JSON.stringify(data, null, 2));
+            console.log('==============================');
+
             // For audio input, add the transcribed text as user message
             if (inputType === 'audio' && data.transcription) {
                 this.addMessage(data.transcription, 'user');
@@ -259,15 +270,21 @@ class AICopilotRenderer {
             // Handle different response types
             if (data.action) {
                 // Handle action commands
+                console.log('→ Executing action:', data.action);
                 await this.handleActionCommand(data.action, data.query, data.intent);
             } else if (data.response) {
                 // Handle direct responses
+                console.log('→ Showing response');
                 this.addMessage(data.response, 'assistant');
 
                 // Play audio response if available
                 if (data.audio_data && data.audio_format) {
                     await this.playAudioResponse(data.audio_data, data.audio_format);
                 }
+            } else {
+                // Neither action nor response - this shouldn't happen
+                console.error('→ ERROR: No action or response in data!');
+                this.addMessage('I received an unexpected response format. Please try again.', 'assistant', true);
             }
 
             this.setStatus('ready', 'Command processed');
@@ -698,6 +715,10 @@ class AICopilotRenderer {
     // Window controls
     hideWindow() {
         window.electronAPI.hideWindow();
+    }
+
+    toggleOverlayMode() {
+        window.electronAPI.toggleOverlayMode();
     }
 
     openSettings() {
@@ -1392,21 +1413,20 @@ class AICopilotRenderer {
 
     async getDraftReply(prompt) {
         try {
+            // Use /chat endpoint instead of /process to avoid intent detection issues
             const requestBody = {
-                input_type: 'text',
-                text: prompt,
+                message: prompt,
                 system_prompt: 'You are a helpful assistant that writes message replies. Provide only the reply text, nothing else. Do not include greetings like "Here is a reply:" or explanations.',
                 conversation_history: this.messageHistory
                     .filter(msg => msg.sender !== 'system')
                     .slice(-10)
                     .map(msg => ({
                         role: msg.sender === 'user' ? 'user' : 'assistant',
-                        content: msg.content,
-                        timestamp: msg.timestamp
-                    })),
+                        content: msg.content
+                    }))
             };
 
-            const response = await fetch(`${this.apiBaseUrl}/process`, {
+            const response = await fetch(`${this.apiBaseUrl}/chat`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(requestBody)
@@ -1420,18 +1440,23 @@ class AICopilotRenderer {
             const data = await response.json();
             console.log('Draft reply response data:', data);
 
-            if (data.response) {
-                return data.response;
+            // /chat endpoint returns { message: "...", role: "assistant", ... }
+            if (data.message && data.message.trim()) {
+                return data.message;
             }
 
             // Log the full response to help debug
-            console.error('No response field in data:', JSON.stringify(data, null, 2));
-            throw new Error("No response in draft reply from server.");
+            console.error('No valid message field in data:', JSON.stringify(data, null, 2));
+
+            // Return fallback instead of throwing
+            return "Sorry, I couldn't generate a draft. Please try again.";
 
         } catch (error) {
             console.error('Error getting draft reply:', error);
             console.error('Error details:', error.message);
-            return "Sorry, I couldn't generate a draft.";
+
+            // Always return fallback message instead of throwing
+            return "Sorry, I couldn't generate a draft. Please try again.";
         }
     }
 
@@ -1446,8 +1471,14 @@ class AICopilotRenderer {
                 `I received this message from ${message.sender}: "${message.snippet}"\n\nPlease write a short, friendly reply for me.`
             );
 
-            if (!draft || draft.includes("couldn't generate")) {
-                throw new Error('Failed to generate draft reply');
+            // Check if we got a fallback error message
+            if (!draft || draft.includes("couldn't generate") || draft.includes("Sorry")) {
+                this.addMessage(
+                    `❌ Unable to generate draft reply. The AI service may be having issues. Please try again or write your reply manually.`,
+                    'assistant',
+                    true
+                );
+                return;
             }
 
             // Copy draft to clipboard

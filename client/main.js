@@ -7,6 +7,7 @@ class AICopilotApp {
     this.mainWindow = null;
     this.tray = null;
     this.isQuitting = false;
+    this.isOverlayMode = false;
 
     // Initialize auto-launch
     this.autoLauncher = new AutoLaunch({
@@ -149,12 +150,30 @@ class AICopilotApp {
         `Failed to register global shortcut: ${shortcut}`
       );
     }
+
+    // Register global shortcut for overlay mode
+    const overlayShortcut = process.platform === 'darwin' ? 'Command+Shift+O' : 'Ctrl+Shift+O';
+    const overlayRegistered = globalShortcut.register(overlayShortcut, () => {
+      this.toggleOverlayMode();
+    });
+
+    if (!overlayRegistered) {
+      console.error('Failed to register global shortcut:', overlayShortcut);
+      dialog.showErrorBox(
+        'Shortcut Registration Failed',
+        `Failed to register global shortcut: ${overlayShortcut}`
+      );
+    }
   }
 
   setupEventHandlers() {
     // Handle IPC messages from renderer
     ipcMain.handle('app-version', () => {
       return app.getVersion();
+    });
+
+    ipcMain.handle('toggle-overlay-mode', () => {
+      this.toggleOverlayMode();
     });
 
     ipcMain.handle('toggle-window', () => {
@@ -564,6 +583,33 @@ $title.ToString()
       if (process.platform === 'darwin') {
         app.dock.show();
       }
+    }
+  }
+
+  toggleOverlayMode() {
+    if (!this.mainWindow) {
+      return;
+    }
+
+    this.isOverlayMode = !this.isOverlayMode;
+
+    if (this.isOverlayMode) {
+      // Enter overlay mode: semi-transparent, always on top
+      // Note: We keep the window interactive (no click-through) so users can still use buttons
+      this.mainWindow.setOpacity(0.7);
+      this.mainWindow.setAlwaysOnTop(true, 'screen-saver');
+      this.mainWindow.setResizable(false);
+      this.mainWindow.setHasShadow(false);
+      // Keep window focusable and interactive - don't set click-through
+      // this.mainWindow.setFocusable(false); // REMOVED - would make window non-interactive
+      // this.mainWindow.setIgnoreMouseEvents(true); // REMOVED - would make window click-through
+    } else {
+      // Exit overlay mode: back to normal
+      this.mainWindow.setOpacity(1.0);
+      this.mainWindow.setAlwaysOnTop(false);
+      this.mainWindow.setResizable(true);
+      this.mainWindow.setHasShadow(true);
+      // No need to reset focusable or mouse events since we didn't change them
     }
   }
 
