@@ -69,42 +69,27 @@ AI Copilot for Desktops is a cross-platform desktop AI assistant powered by Elec
 
 ## Google Cloud Setup
 
-To use the Google Cloud services (Speech-to-Text, Text-to-Speech, Vision, and Gemini), you need to set up a Google Cloud project and create a service account.
+To use Google Cloud services (Vision, Speech-to-Text, Text-to-Speech), you need to set up a Google Cloud project and enable the necessary APIs.
 
-**📖 For detailed step-by-step instructions, see [server/GOOGLE_CLOUD_SETUP.md](server/GOOGLE_CLOUD_SETUP.md)**
+1.  **Create or Select a Project**: Go to the [Google Cloud Console](https://console.cloud.google.com/) and create a new project or select an existing one.
 
-### Quick Setup Summary
+2.  **Enable APIs**: Enable the following APIs for your project:
+    *   Cloud Vision API
+    *   Cloud Speech-to-Text API
+    *   Cloud Text-to-Speech API
+    *   Generative Language API (for Gemini)
 
-1.  **Create a Google Cloud Project**
-    - Go to [Google Cloud Console](https://console.cloud.google.com/)
-    - Create a new project (e.g., `copilot-desktop-123456`)
-    - Note your project ID and project number
+3.  **Create a Service Account**:
+    *   Navigate to **IAM & Admin > Service Accounts**.
+    *   Click **Create Service Account**.
+    *   Give it a name (e.g., `copilot-desktop-service`).
+    *   Grant it the following roles: `Cloud Vision AI User`, `Cloud Speech-to-Text User`, `Cloud Text-to-Speech User`.
+    *   Create a JSON key for the service account and download it.
 
-2.  **Enable Required APIs**
-    - Cloud Speech-to-Text API
-    - Cloud Text-to-Speech API
-    - Cloud Vision API
-    - Generative Language API (for Gemini)
-
-3.  **Create a Service Account**
-    - Navigate to "IAM & Admin" > "Service Accounts"
-    - Create a new service account
-    - Grant appropriate roles (Speech Client, Text-to-Speech Client, Vision API User)
-    - Download the JSON key file
-    - Save as `service-account-key.json` in the `server/` directory
-
-4.  **Get Gemini API Key**
-    - Visit [Google AI Studio](https://aistudio.google.com/app/apikey)
-    - Create an API key for your project
-    - Copy the API key
-
-5.  **Update Configuration**
-    - Copy `server/.env.example` to `server/.env`
-    - Update `GOOGLE_CLOUD_PROJECT_ID` with your project ID
-    - Update `GEMINI_API_KEY` with your Gemini API key
-    - Verify `GOOGLE_APPLICATION_CREDENTIALS` points to `service-account-key.json`
-
-For complete instructions with screenshots and troubleshooting, see the [detailed setup guide](server/GOOGLE_CLOUD_SETUP.md).
+4.  **Configure Environment**:
+    *   Place the downloaded JSON key in the `server/` directory.
+    *   Rename the key file to `service-account-key.json` or update the `.env` file to point to your key file.
+    *   Update `server/.env` with your `GOOGLE_CLOUD_PROJECT_ID`.
 
 ## Usage
 
@@ -125,97 +110,12 @@ For complete instructions with screenshots and troubleshooting, see the [detaile
 
 ## Messaging Assistance Feature (Experimental)
 
-The messaging assistance feature helps you monitor for new messages and generate AI-powered draft replies.
+This experimental feature monitors your screen for new messages in supported applications and helps you draft replies using AI.
 
-### ✨ Recent Improvements (October 2025)
-
-The application detection system has been completely overhauled for better reliability:
-
--   ✅ **Cross-Platform Support**: Now works reliably on macOS, Windows, and Linux
--   ✅ **Smart App Detection**: Automatically detects Gmail, Slack, Discord, Teams, and more
--   ✅ **Web App Support**: Recognizes web apps in browsers (Gmail in Chrome, Slack Web, etc.)
--   ✅ **Better Accuracy**: Handles platform-specific app name variations automatically
--   ✅ **Comprehensive Logging**: Detailed logs for easy troubleshooting
-
-See [APPLICATION_DETECTION_FIX.md](APPLICATION_DETECTION_FIX.md) for technical details.
-
-### How It Works
-
-1. **Configure Settings**: Click the settings icon (⚙️) to select which apps to monitor and set check interval
-2. **Start Watching**: Click the eye icon (👁️) button to start monitoring for new messages
-3. **Automatic Detection**: The app uses OS-level window detection and OCR to identify messages
-4. **AI-Powered Replies**: When a new message is detected, click "Copy Draft Reply" to generate an AI response
-5. **Manual Pasting**: Paste the draft (Cmd+V / Ctrl+V) into your messaging application
-
-### Supported Applications
-
-**Messaging Apps:**
-- Slack (desktop and web)
-- Discord (desktop and web)
-- Microsoft Teams (desktop and web)
-- WhatsApp (desktop and web)
-- Telegram (desktop and web)
-
-**Email Clients:**
-- Gmail (web)
-- Outlook (desktop and web)
-- Thunderbird
-
-**Browsers:**
-- Google Chrome
-- Firefox
-- Microsoft Edge
-- Safari
-
-### Important Limitations
-
-⚠️ **This is an experimental feature with known limitations:**
-
--   **Accuracy**: Message detection uses window detection + OCR, which may not work reliably in all scenarios
--   **Screen Layout**: Works best with messaging apps that have consistent layouts
--   **Performance**: Captures screenshots periodically, which may impact system performance
--   **Privacy**: Screenshots are processed locally and sent to the backend for OCR analysis
--   **Manual Action Required**: You must manually paste the generated reply - no automated clicking or typing
-
-### Requirements
-
-**Platform-Specific:**
--   **macOS**: Accessibility and screen recording permissions
--   **Windows**: PowerShell execution policy allows scripts
--   **Linux**: `xdotool` and `xprop` installed (`sudo apt-get install xdotool x11-utils`)
-
-**General:**
--   Backend server running with Google Cloud Vision API configured
--   Messaging application visible on screen
--   App selected in monitoring settings
-
-### Best Practices
-
-1. **Configure First**: Open settings (⚙️) and select which apps to monitor
-2. **Test First**: Try the feature with a test conversation to understand its behavior
-3. **Review Drafts**: Always review AI-generated replies before sending
-4. **Check Logs**: If detection isn't working, check backend logs for detailed information
-5. **Stop When Not Needed**: Click the eye icon again to stop monitoring and save system resources
-
-### Troubleshooting
-
-**No messages detected?**
-1. Check that the app is selected in monitoring settings
-2. Verify screen recording/accessibility permissions are granted
-3. Check backend logs for detection details
-4. See [APPLICATION_DETECTION_TESTING_GUIDE.md](APPLICATION_DETECTION_TESTING_GUIDE.md)
-
-**App not detected correctly?**
-1. Check backend logs for raw app name
-2. Report the issue with app name and platform
-3. See [APPLICATION_DETECTION_FIX.md](APPLICATION_DETECTION_FIX.md) for adding new apps
-
-### Documentation
-
--   **Quick Start**: [MESSAGING_ASSISTANCE_QUICK_START.md](MESSAGING_ASSISTANCE_QUICK_START.md)
--   **Technical Details**: [APPLICATION_DETECTION_FIX.md](APPLICATION_DETECTION_FIX.md)
--   **Testing Guide**: [APPLICATION_DETECTION_TESTING_GUIDE.md](APPLICATION_DETECTION_TESTING_GUIDE.md)
--   **Version 2 Updates**: [MESSAGING_ASSISTANCE_V2_UPDATE.md](MESSAGING_ASSISTANCE_V2_UPDATE.md)
+-   **How it Works**: Enable the feature via the "eye" icon (👁️). The app periodically takes screenshots, uses OCR to detect new messages, and notifies you. You can then generate a draft reply and copy it to your clipboard.
+-   **Configuration**: Use the settings icon (⚙️) to select which applications to monitor and adjust the check frequency.
+-   **Privacy**: Screenshots are processed locally and sent to the backend for analysis. Be mindful of on-screen content when this feature is active.
+-   **Limitations**: This feature relies on screen layout and OCR, so its accuracy may vary. It requires the messaging app to be visible on the screen.
 
 ## Project Structure
 
@@ -236,4 +136,4 @@ copilot-desktop/
 
 ## License
 
-This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.
+This project is licensed under the MIT License.
