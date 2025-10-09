@@ -24,4 +24,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // Active window detection (for app filtering)
   getActiveWindowTitle: () => ipcRenderer.invoke('get-active-window-title'),
+
+  // Screen selection
+  openSelectionWindow: () => ipcRenderer.invoke('open-selection-window'),
+  selectionComplete: (rect) => ipcRenderer.invoke('selection-complete', rect),
+  onSelectionComplete: (callback) => ipcRenderer.on('selection-complete', (_event, rect) => callback(rect)),
 });
