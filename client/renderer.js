@@ -116,6 +116,13 @@ class AICopilotRenderer {
             setTimeout(() => this.messageInput.focus(), 100);
         });
 
+        // Listen for screen selection completion
+        window.electronAPI.onSelectionComplete((rect) => {
+            if (rect) {
+                this.captureAndCropScreenshot(rect);
+            }
+        });
+
         console.log('Event listeners set up successfully');
     }
 
@@ -992,20 +999,8 @@ class AICopilotRenderer {
     }
 
     async handleScreenshot() {
-        try {
-            this.setStatus('processing', 'Capturing screenshot...');
-            const blob = await this._getScreenshotBlob();
-            if (!blob) throw new Error("Failed to capture screenshot.");
-
-            const imageUrl = URL.createObjectURL(blob);
-            this.currentScreenshot = { blob, url: imageUrl };
-            this.showScreenshotPreview(imageUrl);
-            this.setStatus('ready', 'Screenshot captured');
-        } catch (error) {
-            console.error('Error capturing screenshot:', error);
-            this.setStatus('error', 'Screenshot capture failed');
-            this.addMessage(`Failed to capture screenshot: ${error.message}`, 'assistant', true);
-        }
+        // This now opens the selection window
+        window.electronAPI.openSelectionWindow();
     }
 
     showScreenshotPreview(imageUrl) {
@@ -1024,6 +1019,40 @@ class AICopilotRenderer {
         if (this.currentScreenshot) {
             URL.revokeObjectURL(this.currentScreenshot.url);
             this.currentScreenshot = null;
+        }
+    }
+
+    async captureAndCropScreenshot(rect) {
+        try {
+            this.setStatus('processing', 'Capturing screen...');
+            const blob = await this._getScreenshotBlob();
+            if (!blob) throw new Error("Failed to capture screen.");
+
+            const image = new Image();
+            const imageUrl = URL.createObjectURL(blob);
+
+            image.onload = () => {
+                const canvas = document.createElement('canvas');
+                canvas.width = rect.width;
+                canvas.height = rect.height;
+                const ctx = canvas.getContext('2d');
+
+                // Crop the image
+                ctx.drawImage(image, rect.x, rect.y, rect.width, rect.height, 0, 0, rect.width, rect.height);
+
+                canvas.toBlob((croppedBlob) => {
+                    const croppedImageUrl = URL.createObjectURL(croppedBlob);
+                    this.currentScreenshot = { blob: croppedBlob, url: croppedImageUrl };
+                    this.showScreenshotPreview(croppedImageUrl);
+                    this.setStatus('ready', 'Region captured');
+                    URL.revokeObjectURL(imageUrl); // Clean up original image
+                }, 'image/jpeg', 0.9);
+            };
+            image.src = imageUrl;
+        } catch (error) {
+            console.error('Error capturing and cropping screenshot:', error);
+            this.setStatus('error', 'Capture failed');
+            this.addMessage(`Failed to capture screen region: ${error.message}`, 'assistant', true);
         }
     }
 

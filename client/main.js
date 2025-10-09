@@ -127,6 +127,33 @@ class AICopilotApp {
     }
   }
 
+  createSelectionWindow() {
+    const { screen } = require('electron');
+    const primaryDisplay = screen.getPrimaryDisplay();
+    const { width, height } = primaryDisplay.workAreaSize;
+
+    const selectionWindow = new BrowserWindow({
+      x: 0,
+      y: 0,
+      width,
+      height,
+      frame: false,
+      transparent: true,
+      alwaysOnTop: true,
+      webPreferences: {
+        preload: path.join(__dirname, 'preload.js'),
+        contextIsolation: true,
+      },
+    });
+
+    selectionWindow.loadFile(path.join(__dirname, 'selection.html'));
+
+    ipcMain.handleOnce('selection-complete', (event, rect) => {
+      selectionWindow.close();
+      this.mainWindow.webContents.send('selection-complete', rect);
+    });
+  }
+
   createTray() {
     // Create tray icon
     try {
@@ -225,6 +252,10 @@ class AICopilotApp {
 
     ipcMain.handle('show-window', () => {
       this.showWindow();
+    });
+
+    ipcMain.handle('open-selection-window', () => {
+      this.createSelectionWindow();
     });
 
     // Screenshot functionality
